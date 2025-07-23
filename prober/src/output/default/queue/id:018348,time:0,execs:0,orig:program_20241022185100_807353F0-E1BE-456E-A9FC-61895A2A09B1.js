@@ -1,0 +1,17 @@
+const v0 = `
+    for (let [i11, i12] = (() => {
+            const o8 = {
+                ["eC"](a5, a6) {
+                    this in "object";
+                },
+            };
+            try { o8.eC(o8, v0, o8, o8, 0); } catch (e) {}
+            return [0, 10];
+        })();
+        i11 < i12;
+        i12--) {
+    }
+    /\u{12345}/myvis;
+`;
+eval(v0);
+gc();

@@ -1,0 +1,11 @@
+const v0 = [-2.618097909471362e+307];
+function F2(a4) {
+    if (!new.target) { throw 'must be called with new'; }
+    a4[Symbol.toPrimitive] = Date;
+}
+new F2(v0);
+const v8 = [-14561,6,-1261741561,550781899];
+v8[2] = v8;
+v8[1] = v8;
+v8.join(v0);
+gc();

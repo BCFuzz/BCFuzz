@@ -1,0 +1,7 @@
+function f1(a2) {
+    const v6 = this.constructor.is(1000000000.0, a2);
+    return v6 && v6;
+}
+const v9 = new Int16Array(1055);
+v9.filter(f1);
+gc();

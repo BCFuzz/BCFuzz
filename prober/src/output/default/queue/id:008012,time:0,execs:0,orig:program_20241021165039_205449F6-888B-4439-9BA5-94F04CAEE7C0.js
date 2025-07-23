@@ -1,0 +1,2 @@
+RegExp.rightContext;
+gc();

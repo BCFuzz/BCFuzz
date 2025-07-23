@@ -1,0 +1,14 @@
+const o5 = {
+    set d(a1) {
+        const v2 = [3];
+        v2[7] = v2;
+        for (let i = 0; i < 10; i++) {
+            const o3 = {
+                __proto__: v2,
+            };
+            o3.copyWithin();
+        }
+    },
+};
+o5.d = o5;
+gc();

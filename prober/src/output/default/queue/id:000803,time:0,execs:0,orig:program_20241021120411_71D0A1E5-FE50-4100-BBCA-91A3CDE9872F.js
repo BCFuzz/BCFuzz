@@ -1,0 +1,2 @@
+Reflect.deleteProperty(Array);
+gc();

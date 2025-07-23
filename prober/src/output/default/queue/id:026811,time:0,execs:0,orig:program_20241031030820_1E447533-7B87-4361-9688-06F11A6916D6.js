@@ -1,0 +1,2 @@
++(-Infinity).toString().toLocaleUpperCase();
+gc();

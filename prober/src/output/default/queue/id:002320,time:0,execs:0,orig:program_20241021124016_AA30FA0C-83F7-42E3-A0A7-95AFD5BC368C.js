@@ -1,0 +1,9 @@
+function F0(a2) {
+    if (!new.target) { throw 'must be called with new'; }
+    const v5 = new Uint8Array(210);
+    for (const v6 of v5) {
+    }
+}
+new F0();
+new F0();
+gc();

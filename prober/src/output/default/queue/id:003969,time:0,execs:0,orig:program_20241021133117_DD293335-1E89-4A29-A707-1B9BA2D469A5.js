@@ -1,0 +1,2 @@
+("constructor").normalize("NFKC");
+gc();

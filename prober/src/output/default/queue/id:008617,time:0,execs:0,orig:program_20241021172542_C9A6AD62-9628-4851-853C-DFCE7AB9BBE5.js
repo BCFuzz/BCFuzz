@@ -1,0 +1,2 @@
+typeof null;
+gc();

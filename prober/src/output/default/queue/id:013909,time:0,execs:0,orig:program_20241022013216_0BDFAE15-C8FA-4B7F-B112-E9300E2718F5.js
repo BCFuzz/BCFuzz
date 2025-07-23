@@ -1,0 +1,6 @@
+const v2 = new Uint8ClampedArray(2513);
+for (const v3 in v2) {
+    let [v4] = v2;
+    Math.round(v4);
+}
+gc();

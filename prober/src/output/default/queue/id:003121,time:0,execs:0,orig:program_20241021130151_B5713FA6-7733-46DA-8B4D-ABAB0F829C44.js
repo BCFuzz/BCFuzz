@@ -1,0 +1,2 @@
+([Reflect,Reflect]).toString();
+gc();

@@ -1,0 +1,2 @@
+noInline(noInline);
+gc();

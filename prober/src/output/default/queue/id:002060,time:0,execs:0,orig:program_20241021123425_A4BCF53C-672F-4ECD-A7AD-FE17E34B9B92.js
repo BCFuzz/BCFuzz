@@ -1,0 +1,2 @@
+("resolve").match.name;
+gc();

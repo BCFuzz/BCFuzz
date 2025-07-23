@@ -1,0 +1,9 @@
+for (let v0 = 0; v0 < 25; v0++) {
+    class C2 {
+        static #d = 2147483647;
+        static {
+            this.#d ||= this;
+        }
+    }
+}
+gc();

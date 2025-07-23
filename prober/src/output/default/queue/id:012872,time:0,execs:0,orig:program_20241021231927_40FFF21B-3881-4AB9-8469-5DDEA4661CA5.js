@@ -1,0 +1,8 @@
+class C2 extends Int16Array {
+}
+for (let v3 = 0; v3 < 100; v3++) {
+    class C4 extends C2 {
+    }
+    new C4(Set);
+}
+gc();

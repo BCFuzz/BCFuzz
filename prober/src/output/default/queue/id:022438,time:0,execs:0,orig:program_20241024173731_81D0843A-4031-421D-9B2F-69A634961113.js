@@ -1,0 +1,10 @@
+const v2 = new Uint8Array(4);
+const v4 = [303537114,-4294967297,1000];
+const v5 = [-1,9,4294967296,65536,10,49592,10];
+const v6 = v5.fill(v2);
+v6[5] = v6;
+v6[Symbol.toPrimitive] = Date;
+v6[0] = v6;
+const v10 = [];
+Reflect.apply(v4.sort, v5, v10);
+gc();

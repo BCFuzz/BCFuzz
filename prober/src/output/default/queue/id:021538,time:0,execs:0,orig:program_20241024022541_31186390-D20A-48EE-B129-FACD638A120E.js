@@ -1,0 +1,15 @@
+for (let i3 = 0, i4 = 10; i3 < i4; i4--) {
+}
+const o21 = {
+    n(a13, a14, a15) {
+        const v16 = this;
+        const v18 = v16.Intl.Locale;
+        v18.numberingSystem = "search";
+        const v19 = new v18("aWqBm", v18);
+        v19.getNumberingSystems();
+        return "aWqBm";
+    },
+};
+const t12 = o21.n;
+t12(o21, "aWqBm", "search", "aWqBm");
+gc();

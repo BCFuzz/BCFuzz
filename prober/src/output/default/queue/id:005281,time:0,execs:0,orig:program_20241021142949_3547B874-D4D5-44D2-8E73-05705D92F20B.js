@@ -1,0 +1,10 @@
+function f0(a1, a2, a3, a4) {
+    const v7 = new BigInt64Array(512);
+    for (const v8 in v7) {
+        const v11 = Array(3190);
+        v11.g = v11;
+    }
+    return BigInt64Array;
+}
+f0(f0, f0, f0, f0(f0, f0, f0, f0));
+gc();

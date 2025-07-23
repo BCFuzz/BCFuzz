@@ -1,0 +1,10 @@
+const v2 = Array(512);
+const v3 = [v2];
+const v4 = [v3,512,Array];
+[];
+const v6 = [v2,v4,v3];
+Array(512);
+v3[12] ||= 512;
+Math.fround(Set);
+Math.cos(v6);
+gc();

@@ -1,0 +1,2 @@
+Number.isSafeInteger();
+gc();

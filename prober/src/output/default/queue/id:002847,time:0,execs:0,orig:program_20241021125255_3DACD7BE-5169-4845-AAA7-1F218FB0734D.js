@@ -1,0 +1,2 @@
+Number.isFinite(Number);
+gc();

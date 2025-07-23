@@ -1,0 +1,10 @@
+const v1 = [-666.0974781919775,1000.0];
+const v2 = [303537114,-4294967297,1000];
+const v3 = [-1,9,4294967296,65536,10,49592,10];
+const v6 = [];
+const v9 = Reflect.apply(v2.sort, v3, v6).join(-85.72905008524629);
+const v11 = v1["sort"]();
+Object.defineProperty(v11, "constructor", { value: Date });
+const t7 = v11.constructor;
+new t7(v9);
+gc();

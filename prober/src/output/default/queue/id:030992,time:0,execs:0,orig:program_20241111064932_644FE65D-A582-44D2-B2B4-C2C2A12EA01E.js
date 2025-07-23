@@ -1,0 +1,23 @@
+function F0() {
+    if (!new.target) { throw 'must be called with new'; }
+}
+const v2 = new F0();
+for (let [i18, i19] = (() => {
+        const v5 = delete v2.size;
+        const v6 = `
+            v5.flags |= 1.7421332333300702e+308;
+        `;
+        const v8 = v6.split(v6[6]);
+        v8.reverse();
+        try { v8.flatMap(runString); } catch (e) {}
+        const v16 = createGlobalObject().WebAssembly.instantiate();
+        v16.then(v16, createGlobalObject);
+        return [0, 10];
+    })();
+    (() => {
+        const v20 = i18 != i19;
+        return v20 && v20;
+    })();
+    i19--) {
+}
+gc();

@@ -1,0 +1,2 @@
+typeof "m" === "object";
+gc();

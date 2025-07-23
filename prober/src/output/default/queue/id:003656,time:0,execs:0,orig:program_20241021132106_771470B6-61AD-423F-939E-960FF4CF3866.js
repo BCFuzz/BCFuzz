@@ -1,0 +1,2 @@
+(["d"]).lastIndexOf("d");
+gc();

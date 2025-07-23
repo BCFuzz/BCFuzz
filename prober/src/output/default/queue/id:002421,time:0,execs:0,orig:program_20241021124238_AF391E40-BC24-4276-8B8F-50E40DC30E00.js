@@ -1,0 +1,2 @@
+ArrayBuffer.isView(ArrayBuffer);
+gc();

@@ -1,0 +1,5 @@
+function f0(a1, a2) {
+    return a1;
+}
+f0 != 536870912n;
+gc();

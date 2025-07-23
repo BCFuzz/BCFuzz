@@ -1,0 +1,2 @@
+ensureArrayStorage(ensureArrayStorage);
+gc();

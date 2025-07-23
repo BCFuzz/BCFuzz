@@ -1,0 +1,2 @@
+createGlobalObject().hasOwnProperty("hasInstance");
+gc();

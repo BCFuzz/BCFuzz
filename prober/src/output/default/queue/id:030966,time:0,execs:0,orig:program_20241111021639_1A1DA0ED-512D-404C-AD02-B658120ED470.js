@@ -1,0 +1,18 @@
+const v1 = [-8.509857005037356,7.944828284455271e+307,0.0,1000000.0,-994334.5612093256];
+for (let i5 = 0, i6 = 10 + 10; i6--, i6;) {
+}
+const v12 = `
+    function F13(a15, a16) {
+        if (!new.target) { throw 'must be called with new'; }
+        for (let i20 = 3, i21 = 7; i21--;) {
+        }
+        \`toUTCString${/P(?<a>.)\k<a>*/vgis}c\`;
+        /\u{12345}/myvis;
+        eval(RegExp(a15) + v1);
+    }
+    new F13(F13);
+    for (let i36 = 0, i37 = 268435440; i37--;) {
+    }
+`;
+eval(v12);
+gc();

@@ -1,0 +1,2 @@
+new SyntaxError();
+gc();

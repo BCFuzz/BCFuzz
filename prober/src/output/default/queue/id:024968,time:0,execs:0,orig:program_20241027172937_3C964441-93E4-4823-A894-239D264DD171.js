@@ -1,0 +1,17 @@
+function f1() {
+    return 9;
+}
+const v2 = [-2147483648,1073741825,4294967295,-1810460340];
+const v5 = ("-789426228").constructor;
+v5.toString = f1;
+const v6 = v5.fromCharCode(12, v5, v2, "-789426228");
+const o13 = {
+    n(a8, a9, a10) {
+        const v11 = this;
+        try { v11.eval(v6); } catch (e) {}
+        return v6;
+    },
+};
+const t14 = o13.n;
+t14(v2, f1);
+gc();

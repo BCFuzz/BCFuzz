@@ -1,0 +1,11 @@
+# environment variables:
+AFL_CUSTOM_MUTATOR_LIBRARY=custom_mutators/autotokens/autotokens.so
+AFL_CUSTOM_MUTATOR_ONLY=1
+AFL_CUSTOM_INFO_PROGRAM=/home/wjm/js_experiment/webkit_parser/test_build8/bin/jsc
+AFL_CUSTOM_INFO_PROGRAM_ARGV=@@
+AFL_CUSTOM_INFO_OUT=output/default
+AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1
+AFL_NO_UI=1
+AFL_PYTHON_MODULE=js_trim
+# command line:
+'./afl-fuzz' '-z' '-m' 'none' '-t' '10000' '-x' '/home/wjm/js_experiment/AFLplusplus_token/dictionaries/js.dict' '-i' '/home/wjm/js_experiment/AFLplusplus_token/0x00corpus/js_corpus_fuzzilli_21d' '-o' 'output' '/home/wjm/js_experiment/webkit_parser/test_build8/bin/jsc' '@@'

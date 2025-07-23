@@ -1,0 +1,2 @@
+("MAX_VALUE").codePointAt("MAX_VALUE");
+gc();

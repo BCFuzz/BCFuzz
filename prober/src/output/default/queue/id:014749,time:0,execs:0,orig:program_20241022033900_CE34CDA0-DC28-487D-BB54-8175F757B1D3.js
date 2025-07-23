@@ -1,0 +1,5 @@
+class C1 extends Float64Array {
+}
+const v2 = new C1();
+v2.slice(v2, v2);
+gc();

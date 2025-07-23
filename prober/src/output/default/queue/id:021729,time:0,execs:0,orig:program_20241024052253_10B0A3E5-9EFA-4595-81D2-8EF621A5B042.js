@@ -1,0 +1,10 @@
+const v1 = [5.0,-423192.566535805,-1000000000000.0,-154.71693492067675,-1000000.0,-1e-15,3.0,-4.0,792078.8706440886];
+function f3() {
+    v1[669567111] <<= -2.0;
+    return v1;
+}
+Array.valueOf = f3;
+v1.indexOf(Array, Array);
+const v7 = createGlobalObject().BigInt64Array;
+try { new v7(v1); } catch (e) {}
+gc();

@@ -1,0 +1,2 @@
+drainMicrotasks();
+gc();

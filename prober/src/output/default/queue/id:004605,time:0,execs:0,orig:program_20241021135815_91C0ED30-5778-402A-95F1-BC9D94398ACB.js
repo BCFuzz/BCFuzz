@@ -1,0 +1,2 @@
+("padEnd").normalize("NFKD");
+gc();

@@ -1,0 +1,10 @@
+new Int16Array(1094);
+new BigInt64Array(127);
+let v6 = 3704;
+v6 + v6;
+new Uint16Array(v6);
+let v13 = 0;
+v6 = v13;
+v13++;
+v13 < 1;
+gc();

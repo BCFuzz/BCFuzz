@@ -1,0 +1,6 @@
+class C0 {
+}
+const v2 = new SharedArrayBuffer();
+const v4 = new DataView(v2);
+try { v4.getUint16(v4, C0); } catch (e) {}
+gc();

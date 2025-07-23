@@ -1,0 +1,11 @@
+const v1 = new Uint8Array();
+const v2 = new Uint8Array();
+const v5 = new Int8Array();
+const v6 = [v1,v5];
+const v8 = new BigInt64Array(128, 128, 128);
+const t5 = v8.constructor;
+const v10 = new t5();
+const v12 = Array.bind();
+v6.sort(v12);
+v2["fill"](v10, 128, v12);
+gc();

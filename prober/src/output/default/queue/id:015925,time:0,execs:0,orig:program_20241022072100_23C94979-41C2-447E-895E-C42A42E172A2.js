@@ -1,0 +1,11 @@
+const v1 = new Int16Array(Int16Array);
+function f2(a3, a4) {
+    return Math.asin();
+}
+v1[Symbol.toPrimitive] = f2;
+const v9 = [-33637,4294967296,89333515,8463,129,4,474010504,9007199254740992,-268435456,-9007199254740990];
+Object.defineProperty(v9, "currency", { configurable: true, value: v1 });
+const v10 = [4294967295,1073741823,14,-24308,9,-24440,257,-65537];
+const v11 = [108790335,41750,16,-17250,6,5,2,-1354796229];
+v11.toLocaleString(v10[3484], v9);
+gc();

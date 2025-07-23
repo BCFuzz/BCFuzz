@@ -1,0 +1,12 @@
+const v3 = new Uint8Array(3129);
+for (const v4 in v3) {
+    function f5() {
+        return arguments;
+    }
+    const v7 = f5();
+    const v8 = /\p{gc=Nd}/mvi;
+    v8.exec(v4);
+    v8 < 21768;
+    v7 instanceof BigUint64Array;
+}
+gc();

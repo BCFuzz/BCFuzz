@@ -1,0 +1,11 @@
+let v0 = -1.0878684535688395e+308;
+const v3 = new Uint8Array(3129);
+for (const v4 in v3) {
+    function f5() {
+        ++v0;
+        Math.log1p(v0);
+        return arguments;
+    }
+    f5();
+}
+gc();

@@ -1,0 +1,10 @@
+const v2 = [303537114,-4294967297,1000];
+const v3 = [-1,9,4294967296,65536,10,49592,10];
+const v4 = v3.copyWithin("", 2.0);
+v4[3] = v4;
+v3[1000] = Date();
+const v8 = [];
+const v9 = v2.sort;
+v9.call(v3);
+Reflect.apply(v9, v3, v8);
+gc();

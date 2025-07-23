@@ -1,0 +1,2 @@
+TypeError("number", "number");
+gc();

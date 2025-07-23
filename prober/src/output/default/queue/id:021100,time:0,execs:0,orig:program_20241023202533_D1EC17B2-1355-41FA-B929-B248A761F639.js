@@ -1,0 +1,10 @@
+const v0 = [303537114,-4294967297,1000];
+const v1 = [-1,9,4294967296,65536,10,49592,10];
+v1[1000] = Date(Date);
+const v5 = [];
+const v7 = Reflect.apply(v0.sort, v1, v5);
+const v8 = v7.join(v7);
+const v10 = new Uint16Array();
+const t7 = v10["sort"]().constructor;
+new t7(v8);
+gc();

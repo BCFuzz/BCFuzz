@@ -1,0 +1,9 @@
+const o2 = {
+    "maxByteLength": 65537,
+};
+const v4 = new ArrayBuffer(1175, o2);
+const v6 = new Int32Array(v4);
+createGlobalObject().Atomics.exchange(v6);
+for (let i13 = -2976, i14 = 10; i13 !== i14; i14--) {
+}
+gc();

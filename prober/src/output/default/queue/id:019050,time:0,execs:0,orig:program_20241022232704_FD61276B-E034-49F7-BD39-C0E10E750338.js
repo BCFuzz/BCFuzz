@@ -1,0 +1,19 @@
+for (let i3 = 0, i4 = 10;
+    (() => {
+        for (let [i13, i14] = (() => {
+                const v5 = [5.0,0.15731719625813334];
+                v5.minimum = 40072;
+                const t2 = this.WebAssembly.Memory;
+                const v9 = new t2(v5);
+                v9.buffer;
+                return [0, 10];
+            })();
+            i14;
+            ) {
+            i14--;
+        }
+        return i3 < i4;
+    })();
+    i4--) {
+}
+gc();

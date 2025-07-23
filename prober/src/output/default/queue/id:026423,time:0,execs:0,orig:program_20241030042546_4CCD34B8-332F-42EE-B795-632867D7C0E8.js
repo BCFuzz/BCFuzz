@@ -1,0 +1,11 @@
+for (let v0 = 0; v0 < 10; v0++) {
+    const v1 = [12,129,-2147483648,-719364873];
+    function f2(a3, a4) {
+        const v5 = /[-\xf0\x9f\x92\xa9]+/mis;
+        v5.test(v5);
+        return v0;
+    }
+    v1.toString = f2;
+    v1 == 14388;
+}
+gc();

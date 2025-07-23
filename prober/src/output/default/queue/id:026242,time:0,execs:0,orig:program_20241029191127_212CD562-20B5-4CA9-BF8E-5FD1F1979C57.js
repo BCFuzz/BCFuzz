@@ -1,0 +1,10 @@
+const v2 = new Float64Array(BigInt64Array);
+function f3() {
+    return BigInt64Array;
+}
+function f4(a5) {
+    return a5;
+}
+Object.defineProperty(v2, "constructor", { configurable: true, get: f3, set: f4 });
+try { v2.subarray(BigInt64Array, v2); } catch (e) {}
+gc();

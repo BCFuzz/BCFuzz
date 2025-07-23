@@ -1,0 +1,3 @@
+const v1 = 2.2250738585072014e-308 | 2.2250738585072014e-308;
+JSON.stringify(JSON.propertyIsEnumerable(v1, JSON, JSON, JSON, v1), JSON.parse(2.2250738585072014e-308), v1);
+gc();

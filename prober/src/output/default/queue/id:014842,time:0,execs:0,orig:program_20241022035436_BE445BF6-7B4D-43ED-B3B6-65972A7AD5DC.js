@@ -1,0 +1,2 @@
+delete Error.prototype;
+gc();

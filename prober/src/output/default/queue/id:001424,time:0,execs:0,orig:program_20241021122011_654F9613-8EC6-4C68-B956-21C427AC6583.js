@@ -1,0 +1,2 @@
+("bigint").normalize("NFKC");
+gc();

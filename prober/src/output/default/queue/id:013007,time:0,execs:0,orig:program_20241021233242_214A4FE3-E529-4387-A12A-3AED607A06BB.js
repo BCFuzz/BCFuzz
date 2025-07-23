@@ -1,0 +1,15 @@
+for (let i2 = 0, i3 = 10; i2 !== i3; i3--) {
+}
+for (let v10 = 0; v10 < 25; v10++) {
+    function f11() {
+        for (let v12 = 0; v12 < 50; v12++) {
+            switch (-v12) {
+                case v12:
+                    break;
+            }
+        }
+        return f11;
+    }
+    f11();
+}
+gc();

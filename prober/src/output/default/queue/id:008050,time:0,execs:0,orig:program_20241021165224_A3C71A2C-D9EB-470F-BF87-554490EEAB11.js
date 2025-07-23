@@ -1,0 +1,2 @@
+Array.fromAsync("o");
+gc();

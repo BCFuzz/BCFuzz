@@ -1,0 +1,2 @@
+("o").normalize("NFD");
+gc();

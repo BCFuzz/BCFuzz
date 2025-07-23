@@ -1,0 +1,10 @@
+const v2 = new BigUint64Array(512);
+const v4 = [303537114,-4294967297,1000];
+const v5 = [5,512,-4294967297,0,62618,-17642,-12,65536,-12,60566];
+v5[799] = v2;
+v5[858] = v5;
+Object.defineProperty(v5, 552, { configurable: true, value: 4096 });
+v5[1000] = Date(4096);
+const v9 = [];
+Reflect.apply(v4.sort, v5, v9);
+gc();

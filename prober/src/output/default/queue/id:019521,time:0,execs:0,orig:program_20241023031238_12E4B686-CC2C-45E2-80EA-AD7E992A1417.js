@@ -1,0 +1,9 @@
+function f0() {
+}
+const v1 = [490.4264307705703,-195005.96089151688,-2.220446049250313e-16,1.0313758447661936e+308,980104.691805532,2.2250738585072014e-308,-0.0,-429.22112076774636,-1.0,1.6893125657306344e+308];
+const o2 = {
+};
+Object.defineProperty(o2, "getOwnPropertyDescriptor", { writable: true, enumerable: true, value: f0 });
+const v4 = new Proxy(v1, o2);
+v4[Symbol.isConcatSpreadable] = o2;
+gc();

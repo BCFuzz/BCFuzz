@@ -1,0 +1,2 @@
+this.WebAssembly = this;
+gc();

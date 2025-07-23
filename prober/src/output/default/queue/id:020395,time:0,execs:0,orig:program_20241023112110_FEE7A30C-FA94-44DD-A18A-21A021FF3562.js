@@ -1,0 +1,14 @@
+function F0(a2, a3, a4) {
+    if (!new.target) { throw 'must be called with new'; }
+    const v7 = new Float32Array(3008);
+    const v8 = v7[5];
+    const v9 = v8 - v8;
+    gc();
+    v7[991] = v9;
+    for (const v12 in v7) {
+    }
+}
+new F0();
+for (let i16 = -3, i17 = 10; i16 < i17; i17--) {
+}
+gc();

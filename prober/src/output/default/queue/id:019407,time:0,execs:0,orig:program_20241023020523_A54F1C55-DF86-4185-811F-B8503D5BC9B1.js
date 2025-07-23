@@ -1,0 +1,22 @@
+const o2 = {
+    set f(a1) {
+    },
+};
+function f3() {
+    return o2;
+}
+class C4 extends f3 {
+    constructor(a6, a7) {
+        for (let i10 = 0, i11 = 10; i10 < i11; i11--) {
+        }
+        super();
+        const v20 = Date();
+        const o21 = {
+            [Math]: v20,
+            "h": o2,
+        };
+        JSON.stringify(o21);
+    }
+}
+new C4();
+gc();

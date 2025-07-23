@@ -1,0 +1,10 @@
+const v2 = Array(Int8Array);
+v2[641] = Int8Array;
+const v4 = [v2,v2,v2,v2,v2];
+const v5 = v2.copyWithin;
+const v6 = Reflect.apply(v5, v2, v4);
+const v7 = v6.concat(Array, Reflect, v5, Reflect, v6);
+v7.fill();
+v7.e = v7;
+v7.shift();
+gc();

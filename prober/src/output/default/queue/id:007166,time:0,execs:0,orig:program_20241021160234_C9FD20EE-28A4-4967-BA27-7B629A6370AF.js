@@ -1,0 +1,2 @@
+Math.hasOwnProperty(Math);
+gc();

@@ -1,0 +1,13 @@
+const v0 = [-666.0974781919775,1000.0];
+const v1 = [303537114,-4294967297,1000];
+const v2 = [-1,9,4294967296,65536,10,49592,10];
+v2[9] = v0;
+const v5 = [];
+const v7 = Reflect.apply(v1.sort, v2, v5);
+const v8 = v7.join(v7);
+const v10 = new Uint16Array(Date, v7, v7);
+const v12 = v10["sort"]();
+Object.defineProperty(v12, "constructor", { value: Date });
+const t10 = v12.constructor;
+new t10(v8);
+gc();

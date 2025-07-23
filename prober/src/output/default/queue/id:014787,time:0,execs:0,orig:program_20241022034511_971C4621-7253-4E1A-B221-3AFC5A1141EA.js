@@ -1,0 +1,17 @@
+for (let v0 = 0; v0 < 5; v0++) {
+    function F2(a4, a5, a6) {
+        if (!new.target) { throw 'must be called with new'; }
+        const v7 = a5.name;
+        class C8 {
+            constructor(a10, a11) {
+                a10 / a10;
+                -a11;
+                v7 in arguments;
+            }
+        }
+        new C8(196.25100004624983);
+        new C8(a4);
+    }
+    new F2(196.25100004624983, F2);
+}
+gc();

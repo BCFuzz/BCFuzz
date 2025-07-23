@@ -1,0 +1,13 @@
+let v0 = [-1.7976931348623157e+308];
+class C1 {
+    constructor(a3, a4, a5, a6) {
+        for (let v7 = 0; v7 < 83; v7++) {
+            Math.floor(v0);
+            ++v0;
+            Math.abs(v0);
+        }
+    }
+}
+new C1();
+new C1();
+gc();

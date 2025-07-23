@@ -1,0 +1,2 @@
+("getUTCFullYear").lastIndexOf("toString");
+gc();

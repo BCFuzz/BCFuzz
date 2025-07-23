@@ -1,0 +1,2 @@
+RegExp(RegExp).toString();
+gc();

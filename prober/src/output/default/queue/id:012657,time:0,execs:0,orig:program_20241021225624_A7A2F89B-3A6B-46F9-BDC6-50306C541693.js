@@ -1,0 +1,2 @@
+Number.isInteger(-Infinity);
+gc();

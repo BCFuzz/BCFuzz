@@ -1,0 +1,8 @@
+const v0 = [1000000.0,Infinity,-905874.1501267307,0.7252605056964067,-0.0,2.2250738585072014e-308,0.31775135766944107,-0.0];
+function f1(a2) {
+    const v4 = new Date();
+    v4.toLocaleDateString(a2, Date).toLocaleUpperCase();
+}
+Object.defineProperty(v0, Symbol.toPrimitive, { enumerable: true, value: f1 });
+v0.at(v0);
+gc();

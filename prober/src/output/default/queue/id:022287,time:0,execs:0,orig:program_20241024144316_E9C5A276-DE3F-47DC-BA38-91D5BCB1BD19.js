@@ -1,0 +1,8 @@
+const v1 = ([0.5508370073505572,0.8891661555065609,-409.7607318828917,-781532.8309677354,1000000000.0,-687510.8676399807,0.5695368143998677,0.0,0.6421989437796297,409.0434138121425]).constructor;
+const o3 = {
+    "maxByteLength": v1,
+};
+const v5 = new SharedArrayBuffer(0, o3);
+const v7 = new Float64Array(v5);
+try { BigInt64Array.from(v7); } catch (e) {}
+gc();

@@ -1,0 +1,2 @@
+("getOwnPropertyDescriptor").normalize().fixed();
+gc();

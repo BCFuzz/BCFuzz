@@ -1,0 +1,2 @@
+("WJ").normalize("NFD");
+gc();

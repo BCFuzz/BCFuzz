@@ -1,0 +1,2 @@
+noFTL.apply();
+gc();

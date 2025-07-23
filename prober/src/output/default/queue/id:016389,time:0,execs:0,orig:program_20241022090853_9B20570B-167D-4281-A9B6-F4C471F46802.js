@@ -1,0 +1,2 @@
+!makeMasquerader();
+gc();

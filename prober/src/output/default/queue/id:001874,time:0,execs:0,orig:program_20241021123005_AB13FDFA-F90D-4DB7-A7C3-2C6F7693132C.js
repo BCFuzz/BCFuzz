@@ -1,0 +1,2 @@
+("f")["toLowerCase"]();
+gc();

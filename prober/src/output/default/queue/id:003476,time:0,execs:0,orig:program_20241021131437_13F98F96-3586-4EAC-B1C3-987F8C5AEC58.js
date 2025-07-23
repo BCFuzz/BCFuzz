@@ -1,0 +1,2 @@
+createGlobalObject();
+gc();

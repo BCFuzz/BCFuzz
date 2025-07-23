@@ -1,0 +1,10 @@
+const v0 = [-498377833,16];
+const v2 = new Uint16Array(v0, Uint16Array, v0);
+const v3 = v2[183];
+const v4 = v0 | v3;
+const v5 = [v3,v3,v3];
+v5.enumerable = v4;
+const v8 = new BigUint64Array(1216);
+const t7 = Reflect.defineProperty;
+t7(v8, 269, v5);
+gc();

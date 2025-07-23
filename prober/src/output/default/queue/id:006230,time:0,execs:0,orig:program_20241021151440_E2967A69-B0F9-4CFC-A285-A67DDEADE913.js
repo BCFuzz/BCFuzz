@@ -1,0 +1,10 @@
+const v2 = new Int16Array(2305);
+const v4 = new WeakMap();
+const v5 = [3,-23988,2147483649,-19495,128,268435441,-725195828];
+const v7 = /w(a\1)/mis.toString();
+v7.substring(v4, v5).search(v2);
+const v11 = Array(v7);
+const v12 = v11.reverse();
+v11.__proto__ = v4;
+("").replaceAll(v12);
+gc();

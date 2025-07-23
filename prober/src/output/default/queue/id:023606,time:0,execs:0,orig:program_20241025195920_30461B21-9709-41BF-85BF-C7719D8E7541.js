@@ -1,0 +1,16 @@
+function F0() {
+    if (!new.target) { throw 'must be called with new'; }
+    const o2 = {
+    };
+    for (let v3 = 0; v3 < 92; v3++) {
+        for (let v4 = 0; v4 < 22; v4++) {
+        }
+        let v8 = -Math.ceil(!o2);
+        v8--;
+        const v10 = v8--;
+        v10 * v10;
+        Math.__proto__ = o2;
+    }
+}
+new F0();
+gc();

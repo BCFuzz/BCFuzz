@@ -1,0 +1,2 @@
+Reflect.getPrototypeOf(this);
+gc();

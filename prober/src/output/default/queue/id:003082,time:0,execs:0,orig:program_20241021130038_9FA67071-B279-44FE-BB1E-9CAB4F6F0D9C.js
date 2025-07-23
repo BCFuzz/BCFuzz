@@ -1,0 +1,2 @@
+Boolean.call();
+gc();

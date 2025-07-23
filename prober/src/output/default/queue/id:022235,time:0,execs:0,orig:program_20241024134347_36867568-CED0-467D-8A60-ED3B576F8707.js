@@ -1,0 +1,11 @@
+const v1 = new Int16Array(Int16Array, Int16Array, Int16Array);
+const v2 = v1.buffer;
+v2.transferToFixedLength(Int16Array, v1, v2);
+const o9 = {
+    n(a5, a6, a7) {
+        try { this.fill(); } catch (e) {}
+        return v1;
+    },
+};
+o9.n.apply(v1);
+gc();

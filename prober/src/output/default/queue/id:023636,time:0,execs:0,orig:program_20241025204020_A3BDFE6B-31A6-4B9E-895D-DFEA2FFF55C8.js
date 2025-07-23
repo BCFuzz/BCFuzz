@@ -1,0 +1,15 @@
+const v1 = new WeakSet();
+Math.cbrt(Date(Date));
+const v7 = Int16Array.name;
+new Int32Array();
+new Uint8ClampedArray(v1, v7);
+Uint16Array.f = Uint16Array;
+const v15 = new Uint8Array(Date, v7);
+this.parseFloat(Float32Array);
+this.h = true;
+delete this.h;
+const v21 = this.constructor;
+new ArrayBuffer(v21);
+new Int8Array(v15, v7, v21);
+v21.freeze(this);
+gc();

@@ -1,0 +1,2 @@
+typeof makeMasquerader() === "object";
+gc();

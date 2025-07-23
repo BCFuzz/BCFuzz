@@ -1,0 +1,2 @@
+("object").normalize("NFKC");
+gc();

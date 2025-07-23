@@ -1,0 +1,2 @@
+this.WebAssembly.Memory;
+gc();

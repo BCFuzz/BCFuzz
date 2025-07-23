@@ -1,0 +1,7 @@
+const v0 = [586003.9365868429,-1.0,48.92413070200587,2.220446049250313e-16,-982.5835837891182,-3.0,209.46001834861568,-531.2345478104589,-2.2250738585072014e-308,-Infinity];
+const v1 = [256,23028,-61733];
+let v2 = undefined;
+const v4 = new FinalizationRegistry(FinalizationRegistry);
+v2 = v4;
+v4.register(v0, v1);
+gc();

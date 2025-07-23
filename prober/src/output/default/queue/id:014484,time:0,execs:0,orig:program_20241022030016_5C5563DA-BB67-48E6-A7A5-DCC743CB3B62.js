@@ -1,0 +1,2 @@
+String.prototype.localeCompare();
+gc();

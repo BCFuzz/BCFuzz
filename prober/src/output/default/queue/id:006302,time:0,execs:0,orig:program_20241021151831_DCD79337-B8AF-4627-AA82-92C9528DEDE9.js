@@ -1,0 +1,13 @@
+for (let v0 = 0; v0 < 5; v0++) {
+    for (let v2 = 0; v2 < 5; v2++) {
+        function F3() {
+            if (!new.target) { throw 'must be called with new'; }
+            const v9 = ("").split(([1000000.0,Infinity,-905874.1501267307,0.7252605056964067,-0.0,2.2250738585072014e-308,0.31775135766944107,-0.0]).values().next());
+            v9[0] = 2;
+            v9.push(v2);
+            eval();
+        }
+        new F3();
+    }
+}
+gc();

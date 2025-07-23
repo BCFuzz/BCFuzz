@@ -1,0 +1,16 @@
+const v2 = new Int16Array();
+function f3() {
+    let v4 = -2;
+    const v5 = v4--;
+    for (let i8 = 0, i9 = 10; i9--, i8 < i9;) {
+        const v18 = createGlobalObject().Atomics;
+        try { v18.xor(v2, i8, v5); } catch (e) {}
+        Math.imul(Uint32Array, -60209);
+    }
+    const v25 = new Uint8Array(3129);
+    for (const v26 in v25) {
+    }
+    return v25;
+}
+f3();
+gc();

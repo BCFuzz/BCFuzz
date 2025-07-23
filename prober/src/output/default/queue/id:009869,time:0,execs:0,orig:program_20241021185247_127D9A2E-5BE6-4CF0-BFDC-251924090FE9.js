@@ -1,0 +1,5 @@
+const v1 = new ArrayBuffer(ArrayBuffer, ArrayBuffer);
+const v3 = new DataView(v1);
+const v4 = v3.__proto__;
+try { v4.setInt32(v1, ArrayBuffer, v3, ArrayBuffer, v3); } catch (e) {}
+gc();
