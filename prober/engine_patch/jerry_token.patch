@@ -1,0 +1,1296 @@
+diff --git a/jerry-core/include/fuzzilli.h b/jerry-core/include/fuzzilli.h
+new file mode 100644
+index 00000000..ae7fe738
+--- /dev/null
++++ b/jerry-core/include/fuzzilli.h
+@@ -0,0 +1,27 @@
++
++struct shmem_data {
++    uint32_t num_edges;
++    unsigned char edges[];
++};
++
++struct token_shmem_data {
++    uint32_t loc;
++    uint32_t edges[];
++};
++
++struct bc_shmem_data {
++    uint32_t loc;
++    uint32_t edges[];
++};
++
++extern struct token_shmem_data* __token_shmem;
++extern struct token_shmem_data* __line_shmem;
++extern struct bc_shmem_data* __bc_shmem;
++extern struct bc_shmem_data* __bc_line_shmem;
++
++extern int my_start_record; // for syntax/ semantic error
++extern int my_start_record2; // for ERBlock
++
++void my_add_token(int token_id);
++void my_add_line(int line_id);
++void my_add_bc(int bc_id, int bc_line);
+diff --git a/jerry-core/parser/js/common.c b/jerry-core/parser/js/common.c
+index eafd1677..4f438811 100644
+--- a/jerry-core/parser/js/common.c
++++ b/jerry-core/parser/js/common.c
+@@ -290,6 +290,20 @@ util_print_cbc (ecma_compiled_code_t *compiled_code_p) /**< compiled code */
+   uint16_t literal_end;
+   size_t size = ((size_t) compiled_code_p->size) << JMEM_ALIGNMENT_LOG;
+ 
++
++  /*
++  static int myprint = 0;
++  if(myprint==0)
++  {
++    for(int i=0;i<239;i++)
++      printf("id:%d, name:%s\n", i, cbc_names[i]);
++    for(int i=0;i<171;i++)
++      printf("id:%d, name:%s\n", i, cbc_ext_names[i]);
++  }
++  myprint = 1;
++  */
++  
++
+   if (compiled_code_p->status_flags & CBC_CODE_FLAGS_UINT16_ARGUMENTS)
+   {
+     cbc_uint16_arguments_t *args = (cbc_uint16_arguments_t *) compiled_code_p;
+@@ -458,7 +472,7 @@ util_print_cbc (ecma_compiled_code_t *compiled_code_p) /**< compiled code */
+     if (opcode != CBC_EXT_OPCODE)
+     {
+       flags = cbc_flags[opcode];
+-      JERRY_DEBUG_MSG (" %3d : %s", (int) cbc_offset, cbc_names[opcode]);
++      JERRY_DEBUG_MSG (" %3d : %d %s", (int) cbc_offset, opcode, cbc_names[opcode]);
+       byte_code_p++;
+     }
+     else
+@@ -476,7 +490,7 @@ util_print_cbc (ecma_compiled_code_t *compiled_code_p) /**< compiled code */
+       }
+ 
+       flags = cbc_ext_flags[ext_opcode];
+-      JERRY_DEBUG_MSG (" %3d : %s", (int) cbc_offset, cbc_ext_names[ext_opcode]);
++      JERRY_DEBUG_MSG (" %3d : %d %s", (int) cbc_offset, ext_opcode, cbc_ext_names[ext_opcode]);
+       byte_code_p += 2;
+     }
+ 
+diff --git a/jerry-core/parser/js/js-lexer.c b/jerry-core/parser/js/js-lexer.c
+index d6305cbd..3b2071d7 100644
+--- a/jerry-core/parser/js/js-lexer.c
++++ b/jerry-core/parser/js/js-lexer.c
+@@ -22,7 +22,7 @@
+ #include "jcontext.h"
+ #include "js-parser-internal.h"
+ #include "lit-char-helpers.h"
+-
++#include "fuzzilli.h"
+ #if JERRY_PARSER
+ 
+ /** \addtogroup parser Parser
+@@ -800,6 +800,7 @@ lexer_parse_identifier (parser_context_t *context_p, /**< context */
+             }
+ 
+             context_p->token.type = (uint8_t) LEXER_KEYW_LET;
++            //my_get_token(context_p, (int)context_p->token.type, (int)context_p->token.keyword_type);
+             break;
+           }
+ 
+@@ -1483,9 +1484,27 @@ lexer_parse_number (parser_context_t *context_p) /**< context */
+     break;                                                                         \
+   }
+ 
++void my_get_token(parser_context_t *context_p, int token_id, int key_id)
++{
++  if(key_id==0)
++  {
++    my_add_token(token_id);
++    my_add_line((int)context_p->line);
++    //printf("token_id: %d, line_id: %d\n", token_id, context_p->line);
++  }
++  else
++  {
++    my_add_token(key_id);
++    my_add_line((int)context_p->line);
++    //printf("key_id: %d, line_id: %d\n", key_id, context_p->line);
++  }
++    
++}
++
+ /**
+  * Get next token.
+  */
++
+ void
+ lexer_next_token (parser_context_t *context_p) /**< context */
+ {
+@@ -1506,17 +1525,20 @@ lexer_next_token (parser_context_t *context_p) /**< context */
+   if (length == 0)
+   {
+     context_p->token.type = LEXER_EOS;
++    my_get_token(context_p, (int)context_p->token.type, (int)context_p->token.keyword_type);
+     return;
+   }
+ 
+   if (lexer_parse_identifier (context_p, LEXER_PARSE_CHECK_KEYWORDS))
+   {
++    my_get_token(context_p, (int)context_p->token.type, (int)context_p->token.keyword_type);
+     return;
+   }
+ 
+   if (context_p->source_p[0] >= LIT_CHAR_0 && context_p->source_p[0] <= LIT_CHAR_9)
+   {
+     lexer_parse_number (context_p);
++    my_get_token(context_p, (int)context_p->token.type, (int)context_p->token.keyword_type);
+     return;
+   }
+ 
+@@ -1537,6 +1559,7 @@ lexer_next_token (parser_context_t *context_p) /**< context */
+       if (length >= 2 && (context_p->source_p[1] >= LIT_CHAR_0 && context_p->source_p[1] <= LIT_CHAR_9))
+       {
+         lexer_parse_number (context_p);
++        my_get_token(context_p, (int)context_p->token.type, (int)context_p->token.keyword_type);
+         return;
+       }
+ 
+@@ -1782,6 +1805,7 @@ lexer_next_token (parser_context_t *context_p) /**< context */
+     case LIT_CHAR_GRAVE_ACCENT:
+     {
+       lexer_parse_string (context_p, LEXER_STRING_NO_OPTS);
++      my_get_token(context_p, (int)context_p->token.type, (int)context_p->token.keyword_type);
+       return;
+     }
+ 
+@@ -1790,6 +1814,7 @@ lexer_next_token (parser_context_t *context_p) /**< context */
+       parser_raise_error (context_p, PARSER_ERR_INVALID_CHARACTER);
+     }
+   }
++  my_get_token(context_p, (int)context_p->token.type, (int)context_p->token.keyword_type);
+ 
+   context_p->source_p += length;
+   PARSER_PLUS_EQUAL_LC (context_p->column, length);
+diff --git a/jerry-core/parser/js/js-parser-expr.c b/jerry-core/parser/js/js-parser-expr.c
+index ef9170dc..6c91529f 100644
+--- a/jerry-core/parser/js/js-parser-expr.c
++++ b/jerry-core/parser/js/js-parser-expr.c
+@@ -126,7 +126,7 @@ typedef struct
+   uint16_t opcode; /**< call opcode */
+ } parser_call_reference_t;
+ 
+-static void parser_parse_postfix_expresion (parser_context_t *context_p, size_t *grouping_level_p);
++void parser_parse_postfix_expresion (parser_context_t *context_p, size_t *grouping_level_p);
+ static parser_call_reference_t parser_form_call_reference (parser_context_t *context_p);
+ static bool parser_process_group_expression (parser_context_t *context_p, size_t *grouping_level_p);
+ 
+@@ -329,7 +329,7 @@ parser_emit_unary_lvalue_opcode (parser_context_t *context_p, /**< context */
+ /**
+  * Parse array literal.
+  */
+-static void
++void
+ parser_parse_array_literal (parser_context_t *context_p) /**< context */
+ {
+   uint32_t pushed_items = 0;
+@@ -395,10 +395,10 @@ parser_parse_array_literal (parser_context_t *context_p) /**< context */
+ } /* parser_parse_array_literal */
+ 
+ /** Forward definition of parse array initializer. */
+-static void parser_parse_array_initializer (parser_context_t *context_p, parser_pattern_flags_t flags);
++void parser_parse_array_initializer (parser_context_t *context_p, parser_pattern_flags_t flags);
+ 
+ /** Forward definition of parse object initializer. */
+-static void parser_parse_object_initializer (parser_context_t *context_p, parser_pattern_flags_t flags);
++void parser_parse_object_initializer (parser_context_t *context_p, parser_pattern_flags_t flags);
+ 
+ /**
+  * Class literal parsing options.
+@@ -1181,7 +1181,7 @@ parser_parse_class (parser_context_t *context_p, /**< context */
+  *
+  * See also: ES2015 14.3
+  */
+-static void
++void
+ parser_parse_object_method (parser_context_t *context_p) /**< context */
+ {
+   context_p->source_p--;
+@@ -1199,7 +1199,7 @@ parser_parse_object_method (parser_context_t *context_p) /**< context */
+ /**
+  * Reparse the current literal as a common identifier.
+  */
+-static void
++void
+ parser_reparse_as_common_identifier (parser_context_t *context_p, /**< context */
+                                      parser_line_counter_t start_line, /**< start line */
+                                      parser_line_counter_t start_column) /**< start column */
+@@ -1232,7 +1232,7 @@ parser_reparse_as_common_identifier (parser_context_t *context_p, /**< context *
+ /**
+  * Parse object literal.
+  */
+-static void
++void
+ parser_parse_object_literal (parser_context_t *context_p) /**< context */
+ {
+   JERRY_ASSERT (context_p->token.type == LEXER_LEFT_BRACE);
+@@ -1574,7 +1574,7 @@ parser_parse_object_literal (parser_context_t *context_p) /**< context */
+ /**
+  * Parse function literal.
+  */
+-static void
++void
+ parser_parse_function_expression (parser_context_t *context_p, /**< context */
+                                   uint32_t status_flags) /**< function status flags */
+ {
+@@ -1704,7 +1704,7 @@ parser_parse_function_expression (parser_context_t *context_p, /**< context */
+ /**
+  * Parse template literal.
+  */
+-static void
++void
+ parser_parse_template_literal (parser_context_t *context_p) /**< context */
+ {
+   bool is_empty_head = true;
+@@ -2380,7 +2380,7 @@ parser_parse_unary_expression (parser_context_t *context_p, /**< context */
+ /**
+  * Parse expr.#property
+  */
+-static void
++void
+ parser_parse_private_property_access (parser_context_t *context_p) /**< context */
+ {
+   lexer_next_token (context_p);
+@@ -2404,7 +2404,7 @@ parser_parse_private_property_access (parser_context_t *context_p) /**< context
+ /**
+  * Parse expr.property
+  */
+-static void
++void
+ parser_parse_property_access (parser_context_t *context_p) /**< context */
+ {
+   JERRY_ASSERT (context_p->token.type == LEXER_DOT || context_p->token.type == LEXER_QUESTION_MARK_DOT);
+@@ -2457,7 +2457,7 @@ parser_parse_property_access (parser_context_t *context_p) /**< context */
+ /**
+  * Parse an expression enclosed with [] brackets ('[expr]')
+  */
+-static void
++void
+ parser_parse_square_bracketed_expression (parser_context_t *context_p) /**< context */
+ {
+   JERRY_ASSERT (context_p->token.type == LEXER_LEFT_SQUARE);
+@@ -2475,7 +2475,7 @@ parser_parse_square_bracketed_expression (parser_context_t *context_p) /**< cont
+ /**
+  * Parse super[expr]
+  */
+-static void
++void
+ parser_parse_super_element_access_expression (parser_context_t *context_p) /**< context */
+ {
+   JERRY_ASSERT (context_p->last_cbc_opcode == PARSER_TO_EXT_OPCODE (CBC_EXT_PUSH_SUPER));
+@@ -2489,7 +2489,7 @@ parser_parse_super_element_access_expression (parser_context_t *context_p) /**<
+ /**
+  * Parse expr[property]
+  */
+-static void
++void
+ parser_parse_element_access (parser_context_t *context_p) /**< context */
+ {
+   JERRY_ASSERT (context_p->token.type == LEXER_LEFT_SQUARE);
+@@ -2806,7 +2806,7 @@ parser_emit_call_2 (parser_context_t *context_p, /**< context */
+ /**
+  * Parse expr(arguments) or expr`template literal`
+  */
+-static void
++void
+ parser_parse_call_expression (parser_context_t *context_p, /**< context */
+                               parser_call_reference_t *call_ref_p) /**< call reference */
+ {
+@@ -2844,7 +2844,7 @@ parser_parse_call_expression (parser_context_t *context_p, /**< context */
+ /**
+  * Process 'expr?.'
+  */
+-static void
++void
+ parser_parse_optional_chain (parser_context_t *context_p, /**< context */
+                              size_t *grouping_level_p) /**< grouping level */
+ {
+@@ -2958,7 +2958,7 @@ parser_process_new_expression (parser_context_t *context_p) /**< context */
+ /**
+  * Process postfix unary lvalue operators (++, --)
+  */
+-static void
++void
+ parser_parse_postfix_lvalue (parser_context_t *context_p, /**< context */
+                              size_t grouping_level) /**< grouping level */
+ {
+@@ -3072,7 +3072,7 @@ parser_process_prefix_unary_opcodes (parser_context_t *context_p) /**< context *
+ /**
+  * Parse the postfix part of the expression
+  */
+-static void
++void
+ parser_parse_postfix_expresion (parser_context_t *context_p, /**< context */
+                                 size_t *grouping_level_p) /**< grouping level */
+ {
+@@ -4062,7 +4062,7 @@ parser_pattern_process_assignment (parser_context_t *context_p, /**< context */
+ /**
+  * Parse array initializer.
+  */
+-static void
++void
+ parser_parse_array_initializer (parser_context_t *context_p, /**< context */
+                                 parser_pattern_flags_t flags) /**< flags */
+ {
+@@ -4113,7 +4113,7 @@ parser_parse_array_initializer (parser_context_t *context_p, /**< context */
+ /**
+  * Parse object initializer.
+  */
+-static void
++void
+ parser_parse_object_initializer (parser_context_t *context_p, /**< context */
+                                  parser_pattern_flags_t flags) /**< flags */
+ {
+diff --git a/jerry-core/parser/js/js-parser-statm.c b/jerry-core/parser/js/js-parser-statm.c
+index 10df37e5..180201e2 100644
+--- a/jerry-core/parser/js/js-parser-statm.c
++++ b/jerry-core/parser/js/js-parser-statm.c
+@@ -418,7 +418,7 @@ parser_validate_lexical_context (parser_context_t *context_p) /**< context */
+ /**
+  * Parse var statement.
+  */
+-static void
++void
+ parser_parse_var_statement (parser_context_t *context_p) /**< context */
+ {
+   JERRY_ASSERT (context_p->token.type == LEXER_KEYW_VAR || context_p->token.type == LEXER_KEYW_LET
+@@ -566,7 +566,7 @@ parser_parse_var_statement (parser_context_t *context_p) /**< context */
+ /**
+  * Parse function statement.
+  */
+-static void
++void
+ parser_parse_function_statement (parser_context_t *context_p) /**< context */
+ {
+   JERRY_ASSERT (context_p->token.type == LEXER_KEYW_FUNCTION);
+@@ -770,7 +770,7 @@ parser_parse_function_statement (parser_context_t *context_p) /**< context */
+ /**
+  * Parse if statement (starting part).
+  */
+-static void
++void
+ parser_parse_if_statement_start (parser_context_t *context_p) /**< context */
+ {
+   parser_if_else_statement_t if_statement;
+@@ -828,7 +828,7 @@ parser_parse_if_statement_end (parser_context_t *context_p) /**< context */
+ /**
+  * Parse with statement (starting part).
+  */
+-static void
++void
+ parser_parse_with_statement_start (parser_context_t *context_p) /**< context */
+ {
+   parser_with_statement_t with_statement;
+@@ -858,7 +858,7 @@ parser_parse_with_statement_start (parser_context_t *context_p) /**< context */
+ /**
+  * Parse with statement (ending part).
+  */
+-static void
++void
+ parser_parse_with_statement_end (parser_context_t *context_p) /**< context */
+ {
+   parser_with_statement_t with_statement;
+@@ -889,7 +889,7 @@ parser_parse_with_statement_end (parser_context_t *context_p) /**< context */
+ /**
+  * Parse do-while statement (ending part).
+  */
+-static void
++void
+ parser_parse_do_while_statement_end (parser_context_t *context_p) /**< context */
+ {
+   parser_loop_statement_t loop;
+@@ -947,7 +947,7 @@ parser_parse_do_while_statement_end (parser_context_t *context_p) /**< context *
+ /**
+  * Parse while statement (starting part).
+  */
+-static void
++void
+ parser_parse_while_statement_start (parser_context_t *context_p) /**< context */
+ {
+   parser_while_statement_t while_statement;
+@@ -997,7 +997,7 @@ parser_parse_while_statement_start (parser_context_t *context_p) /**< context */
+ /**
+  * Parse while statement (ending part).
+  */
+-static void JERRY_ATTR_NOINLINE
++void JERRY_ATTR_NOINLINE
+ parser_parse_while_statement_end (parser_context_t *context_p) /**< context */
+ {
+   parser_while_statement_t while_statement;
+@@ -1104,7 +1104,7 @@ parser_check_left_hand_side_expression (parser_context_t *context_p, /**< contex
+ /**
+  * Parse for statement (starting part).
+  */
+-static void
++void
+ parser_parse_for_statement_start (parser_context_t *context_p) /**< context */
+ {
+   parser_loop_statement_t loop;
+@@ -1530,7 +1530,7 @@ parser_parse_for_statement_start (parser_context_t *context_p) /**< context */
+ /**
+  * Parse for statement (ending part).
+  */
+-static void JERRY_ATTR_NOINLINE
++void JERRY_ATTR_NOINLINE
+ parser_parse_for_statement_end (parser_context_t *context_p) /**< context */
+ {
+   parser_for_statement_t for_statement;
+@@ -1637,7 +1637,7 @@ parser_parse_for_statement_end (parser_context_t *context_p) /**< context */
+ /**
+  * Parse switch statement (starting part).
+  */
+-static void JERRY_ATTR_NOINLINE
++void JERRY_ATTR_NOINLINE
+ parser_parse_switch_statement_start (parser_context_t *context_p) /**< context */
+ {
+   parser_switch_statement_t switch_statement;
+@@ -1802,7 +1802,7 @@ parser_parse_switch_statement_start (parser_context_t *context_p) /**< context *
+ /**
+  * Parse try statement (ending part).
+  */
+-static void
++void
+ parser_parse_try_statement_end (parser_context_t *context_p) /**< context */
+ {
+   parser_try_statement_t try_statement;
+@@ -1984,7 +1984,7 @@ parser_parse_try_statement_end (parser_context_t *context_p) /**< context */
+ /**
+  * Parse default statement.
+  */
+-static void
++void
+ parser_parse_default_statement (parser_context_t *context_p) /**< context */
+ {
+   parser_stack_iterator_t iterator;
+@@ -2011,7 +2011,7 @@ parser_parse_default_statement (parser_context_t *context_p) /**< context */
+ /**
+  * Parse case statement.
+  */
+-static void
++void
+ parser_parse_case_statement (parser_context_t *context_p) /**< context */
+ {
+   parser_stack_iterator_t iterator;
+@@ -2059,7 +2059,7 @@ parser_parse_case_statement (parser_context_t *context_p) /**< context */
+ /**
+  * Parse break statement.
+  */
+-static void
++void
+ parser_parse_break_statement (parser_context_t *context_p) /**< context */
+ {
+   parser_stack_iterator_t iterator;
+@@ -2141,7 +2141,7 @@ parser_parse_break_statement (parser_context_t *context_p) /**< context */
+ /**
+  * Parse continue statement.
+  */
+-static void
++void
+ parser_parse_continue_statement (parser_context_t *context_p) /**< context */
+ {
+   parser_stack_iterator_t iterator;
+@@ -2247,7 +2247,7 @@ parser_parse_continue_statement (parser_context_t *context_p) /**< context */
+  * Parse import statement.
+  * Note: See 15.2.2
+  */
+-static void
++void
+ parser_parse_import_statement (parser_context_t *context_p) /**< parser context */
+ {
+   JERRY_ASSERT (context_p->token.type == LEXER_KEYW_IMPORT);
+@@ -2543,7 +2543,7 @@ parser_parse_export_statement (parser_context_t *context_p) /**< context */
+ /**
+  * Parse label statement.
+  */
+-static void
++void
+ parser_parse_label (parser_context_t *context_p) /**< context */
+ {
+   parser_stack_iterator_t iterator;
+diff --git a/jerry-core/parser/js/js-parser-util.c b/jerry-core/parser/js/js-parser-util.c
+index c3ba131d..5158a751 100644
+--- a/jerry-core/parser/js/js-parser-util.c
++++ b/jerry-core/parser/js/js-parser-util.c
+@@ -16,6 +16,7 @@
+ #include "ecma-helpers.h"
+ 
+ #include "js-parser-internal.h"
++#include "fuzzilli.h"
+ 
+ #if JERRY_PARSER
+ 
+@@ -40,6 +41,15 @@
+ /**
+  * Append two bytes to the cbc stream.
+  */
++
++int start_record = 0;
++void my_update_bitmap(int bc_id, int line_id)
++{
++  if(start_record == 0)
++    return;
++  my_add_bc(bc_id, line_id);
++}
++
+ static void
+ parser_emit_two_bytes (parser_context_t *context_p, /**< context */
+                        uint8_t first_byte, /**< first byte */
+@@ -47,6 +57,14 @@ parser_emit_two_bytes (parser_context_t *context_p, /**< context */
+ {
+   uint32_t last_position = context_p->byte_code.last_position;
+ 
++  if(first_byte == 0)
++  {
++    //printf("****test2:%d, second:%d\n",context_p->token.line, second_byte);
++    // wjm test ok
++    //__shmem2->edges[0] = 0;
++    my_update_bitmap((int)((int)second_byte)+300, (int)context_p->token.line);
++  }
++    
+   if (last_position + 2 <= PARSER_CBC_STREAM_PAGE_SIZE)
+   {
+     parser_mem_page_t *page_p = context_p->byte_code.last_p;
+@@ -85,6 +103,7 @@ parser_emit_two_bytes (parser_context_t *context_p, /**< context */
+   {                                                                        \
+     parser_cbc_stream_alloc_page ((context_p), &(context_p)->byte_code);   \
+   }                                                                        \
++  my_update_bitmap((int)byte, (int)context_p->token.line);                 \
+   (context_p)->byte_code.last_p->bytes[(context_p)->byte_code.last_position++] = (uint8_t) (byte)
+ 
+ #if JERRY_PARSER_DUMP_BYTE_CODE
+@@ -163,8 +182,9 @@ parser_flush_cbc (parser_context_t *context_p) /**< context */
+ 
+     JERRY_ASSERT (opcode < CBC_END);
+     flags = cbc_flags[opcode];
+-
++    start_record = 1;
+     PARSER_APPEND_TO_BYTE_CODE (context_p, opcode);
++    start_record = 0;
+     context_p->byte_code_size++;
+   }
+   else
+@@ -173,7 +193,9 @@ parser_flush_cbc (parser_context_t *context_p) /**< context */
+ 
+     JERRY_ASSERT (opcode < CBC_EXT_END);
+     flags = cbc_ext_flags[opcode];
++    start_record = 1;
+     parser_emit_two_bytes (context_p, CBC_EXT_OPCODE, (uint8_t) opcode);
++    start_record = 0;
+     context_p->byte_code_size += 2;
+   }
+ 
+@@ -471,7 +493,9 @@ parser_emit_cbc_forward_branch (parser_context_t *context_p, /**< context */
+   }
+   else
+   {
++    start_record = 1;
+     PARSER_APPEND_TO_BYTE_CODE (context_p, CBC_EXT_OPCODE);
++    start_record = 0;
+     opcode = (uint16_t) PARSER_GET_EXT_OPCODE (opcode);
+ 
+     JERRY_ASSERT (opcode < CBC_EXT_END);
+@@ -578,7 +602,9 @@ parser_emit_cbc_backward_branch (parser_context_t *context_p, /**< context */
+   }
+   else
+   {
++    start_record = 1;
+     PARSER_APPEND_TO_BYTE_CODE (context_p, CBC_EXT_OPCODE);
++    start_record = 0;
+     opcode = (uint16_t) PARSER_GET_EXT_OPCODE (opcode);
+ 
+     JERRY_ASSERT (opcode < CBC_EXT_END);
+@@ -621,9 +647,9 @@ parser_emit_cbc_backward_branch (parser_context_t *context_p, /**< context */
+     opcode++;
+     context_p->byte_code_size++;
+   }
+-
++  start_record = 1;
+   PARSER_APPEND_TO_BYTE_CODE (context_p, (uint8_t) opcode);
+-
++  start_record = 0;
+ #if PARSER_MAXIMUM_CODE_SIZE > UINT16_MAX
+   if (offset > UINT16_MAX)
+   {
+diff --git a/jerry-core/parser/js/js-parser.c b/jerry-core/parser/js/js-parser.c
+index 8f241b6a..7b862b14 100644
+--- a/jerry-core/parser/js/js-parser.c
++++ b/jerry-core/parser/js/js-parser.c
+@@ -1370,6 +1370,7 @@ parser_post_processing (parser_context_t *context_p) /**< context */
+ #endif /* JERRY_FUNCTION_TO_STRING */
+   }
+ 
++
+ #if JERRY_PARSER_DUMP_BYTE_CODE
+   if (context_p->is_show_opcodes)
+   {
+@@ -1580,7 +1581,7 @@ parser_free_literals (parser_list_t *literal_pool_p) /**< literals */
+ /**
+  * Parse function arguments
+  */
+-static void
++void
+ parser_parse_function_arguments (parser_context_t *context_p, /**< context */
+                                  lexer_token_type_t end_type) /**< expected end type */
+ {
+diff --git a/jerry-ext/util/print.c b/jerry-ext/util/print.c
+index 82ac7bc5..a09eb1e8 100644
+--- a/jerry-ext/util/print.c
++++ b/jerry-ext/util/print.c
+@@ -170,6 +170,7 @@ jerryx_print_backtrace (unsigned depth)
+ void
+ jerryx_print_unhandled_exception (jerry_value_t exception) /**< exception value */
+ {
++  
+   assert (jerry_value_is_exception (exception));
+   jerry_value_t value = jerry_exception_value (exception, true);
+ 
+diff --git a/jerry-main/CMakeLists.txt b/jerry-main/CMakeLists.txt
+index 82706d71..709bdf86 100644
+--- a/jerry-main/CMakeLists.txt
++++ b/jerry-main/CMakeLists.txt
+@@ -64,7 +64,7 @@ endif()
+ 
+ # Jerry standalones
+ if(JERRY_CMDLINE)
+-  jerry_create_executable("jerry" "main-desktop.c" "arguments/options.c" "arguments/cli.c")
++  jerry_create_executable("jerry" "main-desktop.c" "arguments/options.c" "arguments/cli.c" "main-fuzzilli.c")
+   target_link_libraries("jerry" jerry-ext jerry-port)
+ endif()
+ 
+diff --git a/jerry-main/arguments/options.c b/jerry-main/arguments/options.c
+index abaa91d8..78bbf403 100644
+--- a/jerry-main/arguments/options.c
++++ b/jerry-main/arguments/options.c
+@@ -50,6 +50,7 @@ typedef enum
+   OPT_NO_PROMPT,
+   OPT_CALL_ON_EXIT,
+   OPT_USE_STDIN,
++  OPT_REPRL_FUZZILLI,
+ } main_opt_id_t;
+ 
+ /**
+@@ -101,6 +102,7 @@ static const cli_opt_t main_opts[] = {
+                .meta = "STRING",
+                .help = "invoke the specified function when the process is just about to exit"),
+   CLI_OPT_DEF (.id = OPT_USE_STDIN, .opt = "", .help = "read from standard input"),
++  CLI_OPT_DEF (.id = OPT_REPRL_FUZZILLI, .longopt = "reprl-fuzzilli", .help = "use only with the fuzzilli reprl library"),
+   CLI_OPT_DEF (.id = CLI_OPT_DEFAULT, .meta = "FILE", .help = "input JS file(s)")
+ };
+ 
+@@ -371,6 +373,11 @@ main_parse_args (int argc, /**< argc */
+         arguments_p->option_flags |= OPT_FLAG_USE_STDIN;
+         break;
+       }
++      case OPT_REPRL_FUZZILLI:
++      {
++        arguments_p->option_flags |= OPT_FLAG_REPRL_FUZZILLI;
++        break;
++      }
+       case CLI_OPT_DEFAULT:
+       {
+         main_source_t *source_p = arguments_p->sources_p + arguments_p->source_count;
+diff --git a/jerry-main/arguments/options.h b/jerry-main/arguments/options.h
+index a3ef0b31..5e39474a 100644
+--- a/jerry-main/arguments/options.h
++++ b/jerry-main/arguments/options.h
+@@ -37,6 +37,7 @@ typedef enum
+   OPT_FLAG_NO_PROMPT = (1 << 3),
+   OPT_FLAG_USE_STDIN = (1 << 4),
+   OPT_FLAG_TEST262_OBJECT = (1u << 5),
++  OPT_FLAG_REPRL_FUZZILLI = (1u << 6),
+ } main_option_flags_t;
+ 
+ /**
+diff --git a/jerry-main/main-desktop.c b/jerry-main/main-desktop.c
+index 920ea9ca..56efd4ea 100644
+--- a/jerry-main/main-desktop.c
++++ b/jerry-main/main-desktop.c
+@@ -21,6 +21,8 @@
+ #include "jerryscript-port.h"
+ #include "jerryscript.h"
+ 
++#include "main-fuzzilli.h"
++#include "fuzzilli.h"
+ #include "arguments/options.h"
+ #include "jerryscript-ext/debugger.h"
+ #include "jerryscript-ext/handlers.h"
+@@ -121,6 +123,11 @@ main (int argc, char **argv)
+     return arguments.parse_result;
+   }
+ 
++  if (arguments.option_flags &= OPT_FLAG_REPRL_FUZZILLI) {
++    // Fuzzilli handles its own setup; just completely defer to it.
++    return main_run_fuzzilli(&arguments);
++  }
++
+ restart:
+   main_init_engine (&arguments);
+   int return_code = JERRY_STANDALONE_EXIT_CODE_FAIL;
+@@ -162,6 +169,10 @@ restart:
+ 
+     if (jerry_value_is_exception (result))
+     {
++      printf("******My Error*****\n");
++      my_add_token(1<<28);
++      my_add_line(0);
++      my_start_record = 0;
+       if (jerryx_debugger_is_reset (result))
+       {
+         jerry_cleanup ();
+diff --git a/jerry-main/main-fuzzilli.c b/jerry-main/main-fuzzilli.c
+new file mode 100644
+index 00000000..94e2655a
+--- /dev/null
++++ b/jerry-main/main-fuzzilli.c
+@@ -0,0 +1,530 @@
++#include "main-fuzzilli.h"
++#include "fuzzilli.h"
++#include <assert.h>
++#include <fcntl.h>
++#include <errno.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++#include <sys/stat.h>
++#include <sys/wait.h>
++#include <sys/mman.h>
++#include <sys/shm.h>
++
++#include "jerryscript-port.h"
++#include "jerryscript-ext/sources.h"
++#include "arguments/options.h"
++
++#include "jerryscript.h"
++#include "jerryscript-ext/debugger.h"
++#include "jerryscript-ext/handlers.h"
++#include "jerryscript-ext/print.h"
++#include "jerryscript-ext/properties.h"
++#include "jerryscript-ext/test262.h"
++
++
++#define REPRL_CRFD 100
++#define REPRL_CWFD 101
++#define REPRL_DRFD 102
++#define REPRL_DWFD 103
++
++
++#define SHM_SIZE 0x100000
++#define mySize 4096
++#define BC_SHM_SIZE 0x4000
++#define MAX_EDGES ((SHM_SIZE - 4) * 8)
++
++#ifndef DCHECK
++#define DCHECK(condition) { assert(condition); abort(); }
++#endif
++
++#ifndef CHECK
++#define CHECK DCHECK
++#endif
++
++jerry_value_t
++jerryx_handler_fuzzilli ( const jerry_call_info_t *call_info_p,
++                      const jerry_value_t args_p[], /**< function arguments */
++                      const jerry_length_t args_cnt); /**< number of function arguments */
++
++typedef struct
++{
++  const uint8_t *source_p; /**< valid UTF-8 source code */
++  size_t source_size; /**< size of the source code */
++} parser_source_char_t;
++
++
++static bool
++main_init_debugger (main_args_t *arguments_p) /**< main arguments */
++{
++  bool result = false;
++
++  if (!strcmp (arguments_p->debug_protocol, "tcp"))
++  {
++    result = jerryx_debugger_tcp_create (arguments_p->debug_port);
++  }
++  else
++  {
++    assert (!strcmp (arguments_p->debug_protocol, "serial"));
++    result = jerryx_debugger_serial_create (arguments_p->debug_serial_config);
++  }
++
++  if (!strcmp (arguments_p->debug_channel, "rawpacket"))
++  {
++    result = result && jerryx_debugger_rp_create ();
++  }
++  else
++  {
++    assert (!strcmp (arguments_p->debug_channel, "websocket"));
++    result = result && jerryx_debugger_ws_create ();
++  }
++
++  jerryx_debugger_after_connect (result);
++  return result;
++} /* main_init_debugger */
++
++/**
++ * Inits the engine and the debugger
++ */
++static void
++main_init_engine (main_args_t *arguments_p) /**< main arguments */
++{
++  jerry_init (arguments_p->init_flags);
++
++  jerry_promise_on_event (JERRY_PROMISE_EVENT_FILTER_ERROR, jerryx_handler_promise_reject, NULL);
++
++  if (arguments_p->option_flags & OPT_FLAG_DEBUG_SERVER)
++  {
++    if (!main_init_debugger (arguments_p))
++    {
++      jerry_log (JERRY_LOG_LEVEL_WARNING, "Failed to initialize debugger!\n");
++    }
++  }
++
++  if (arguments_p->option_flags & OPT_FLAG_TEST262_OBJECT)
++  {
++    jerryx_test262_register ();
++  }
++
++  jerryx_register_global ("assert", jerryx_handler_assert);
++  jerryx_register_global ("gc", jerryx_handler_gc);
++  jerryx_register_global ("print", jerryx_handler_print);
++  jerryx_register_global ("sourceName", jerryx_handler_source_name);
++  jerryx_register_global ("fuzzilli", jerryx_handler_fuzzilli);
++  jerryx_register_global ("createRealm", jerryx_handler_create_realm);
++} /* main_init_engine */
++
++
++
++struct shmem_data* __shmem;
++struct token_shmem_data* __token_shmem;
++struct token_shmem_data* __line_shmem;
++struct bc_shmem_data* __bc_shmem;
++struct bc_shmem_data* __bc_line_shmem;
++
++int my_start_record = 1; // default 1, 0 for syntax/semantic error
++int my_start_record2 = 0; // default 0, 1 in trace_pc_guard, and 0 in ERBlocks
++int be_able_to_trace_pc_guard = 0;
++
++
++void my_add_token(int token_id)
++{
++    if(my_start_record==0 || my_start_record2==0)
++        return;
++    int index = (int)__token_shmem->loc;
++    __token_shmem->edges[index] = (uint32_t)token_id;
++    __token_shmem->loc++;
++    if(__token_shmem->loc >= (0x40000-4))
++    {
++        my_start_record=0; // myrecord
++        __token_shmem->loc = 0; // token_shmem len
++    }
++    printf("token:%d, ", token_id);
++}
++
++void my_add_line(int line_id)
++{
++    if(my_start_record==0 || my_start_record2==0)
++        return;
++    int index = (int)__line_shmem->loc;
++    __line_shmem->edges[index] = (uint32_t)line_id;
++    __line_shmem->loc++;
++    if(__line_shmem->loc >= (0x40000-4))
++    {
++        my_start_record=0; // myrecord
++        __line_shmem->loc = 0; // token_shmem len
++    }
++    printf("line:%d\n", line_id);
++}
++
++void my_add_bc(int bc_id, int bc_line)
++{
++    if(my_start_record==0 || my_start_record2==0)
++        return;
++    int index = (int)__bc_shmem->loc;
++    printf("index:%d, bytecode_id:%d, bytecode_line:%d\n", index, bc_id, bc_line);
++
++    __bc_shmem->edges[index] = (uint32_t)bc_id;
++    __bc_line_shmem->edges[index] = (uint32_t)bc_line;
++    __bc_shmem->loc++;
++    __bc_line_shmem->loc++;
++    if(__bc_shmem->loc >= 4090) // about (0x1000-1)
++    {
++        __bc_shmem->loc = 0;
++        __bc_line_shmem->loc = 0;
++    }
++}
++
++
++uint32_t *__edges_start, *__edges_stop;
++void __sanitizer_cov_reset_edgeguards() {
++    uint32_t N = 0;
++    for (uint32_t *x = __edges_start; x < __edges_stop && N < MAX_EDGES; x++)
++        *x = ++N;
++}
++
++void __sanitizer_cov_trace_pc_guard_init(uint32_t *start, uint32_t *stop) {
++    // Avoid duplicate initialization
++    if (start == stop || *start)
++        return;
++
++    if (__edges_start != NULL || __edges_stop != NULL) {
++        fprintf(stderr, "Coverage instrumentation is only supported for a single module\n");
++        _exit(-1);
++    }
++
++    __edges_start = start;
++    __edges_stop = stop;
++
++    // Map the shared memory region
++    const char* shm_key = getenv("__AFL_SHM_ID");
++    if (!shm_key) {
++        puts("[COV] no shared memory bitmap available, skipping");
++        __shmem = (struct shmem_data*) malloc(SHM_SIZE);
++    } else {
++        __shmem = (struct shmem_data*) shmat(atoi(shm_key), 0, 0);
++        if (__shmem == MAP_FAILED) {
++            fprintf(stderr, "Failed to mmap shared memory region\n");
++            _exit(-1);
++        }
++    }
++
++    const char* shm_key2 = getenv("__AFL_SHM_ID2");
++  if (!shm_key2) {
++    puts("[COV] no shared memory bitmap available, skipping");
++    __token_shmem = (struct token_shmem_data*)malloc(SHM_SIZE);
++    memset(__token_shmem, 0, SHM_SIZE);
++  } else {
++
++    __token_shmem = (struct token_shmem_data*)shmat(atoi(shm_key2), 0, 0);
++    if (__token_shmem == MAP_FAILED) {
++      fprintf(stderr, "Failed to mmap token shared memory region\n");
++      _exit(-1);
++    }
++  }
++
++  const char* shm_key3 = getenv("__AFL_SHM_ID3");
++  if (!shm_key3) {
++    puts("[COV] no shared memory bitmap available, skipping");
++    __line_shmem = (struct token_shmem_data*)malloc(SHM_SIZE);
++    memset(__line_shmem, 0, SHM_SIZE);
++  } else {
++    __line_shmem = (struct token_shmem_data*)shmat(atoi(shm_key3), 0, 0);
++    if (__line_shmem == MAP_FAILED) {
++      fprintf(stderr, "Failed to mmap token line shared memory region\n");
++      _exit(-1);
++    }
++  }
++
++  const char* shm_key4 = getenv("__AFL_SHM_ID4");
++  if (!shm_key4) {
++    puts("[COV] no shared memory bitmap available, skipping");
++    __bc_shmem = (struct bc_shmem_data*)malloc(BC_SHM_SIZE);
++    memset(__bc_shmem, 0, BC_SHM_SIZE);
++  } else {
++    __bc_shmem = (struct bc_shmem_data*)shmat(atoi(shm_key4), 0, 0);
++    if (__bc_shmem == MAP_FAILED) {
++      fprintf(stderr, "Failed to mmap bc shared memory region\n");
++      _exit(-1);
++    }
++  }
++
++  const char* shm_key5 = getenv("__AFL_SHM_ID5");
++  if (!shm_key5) {
++    puts("[COV] no shared memory bitmap available, skipping");
++    __bc_line_shmem = (struct bc_shmem_data*)malloc(BC_SHM_SIZE);
++    memset(__bc_line_shmem, 0, BC_SHM_SIZE);
++  } else {
++    __bc_line_shmem = (struct bc_shmem_data*)shmat(atoi(shm_key5), 0, 0);
++    if (__bc_line_shmem == MAP_FAILED) {
++      fprintf(stderr, "Failed to mmap bc line shared memory region\n");
++      _exit(-1);
++    }
++  }
++    __sanitizer_cov_reset_edgeguards();
++
++    __shmem->num_edges = (uint32_t) (stop - start);
++    be_able_to_trace_pc_guard = 1;
++    printf("[COV] edge counters initialized. Shared memory: %s with %u edges\n", shm_key, __shmem->num_edges);
++}
++
++void __sanitizer_cov_trace_pc_guard(uint32_t *guard, int bbflag) {
++  if(!be_able_to_trace_pc_guard) return;
++    // There's a small race condition here: if this function executes in two threads for the same
++    // edge at the same time, the first thread might disable the edge (by setting the guard to zero)
++    // before the second thread fetches the guard value (and thus the index). However, our
++    // instrumentation ignores the first edge (see libcoverage.c) and so the race is unproblematic.
++    uint32_t index = *guard;
++    __shmem->edges[index] = 1;
++
++    my_start_record2=1;
++
++    // parse function entry or return block or loopheader or looplatch or loopexiting
++    if(((1<<25)&bbflag)!=0 || ((1<<26)&bbflag)!=0 || ((1<<29)&bbflag)!=0 || ((1<<30)&bbflag)!=0 || ((1<<24)&bbflag)!=0) 
++    {
++        my_add_token(bbflag);
++        my_add_line(0);
++    }
++    if(((1<<27)&bbflag) != 0) // ignore ERblock in JSC
++    {
++        my_start_record2=0;
++    }
++}
++
++// We have to assume that the fuzzer will be able to call this function e.g. by
++// enumerating the properties of the global object and eval'ing them. As such
++// this function is implemented in a way that requires passing some magic value
++// as first argument (with the idea being that the fuzzer won't be able to
++// generate this value) which then also acts as a selector for the operation
++// to perform.
++jerry_value_t
++jerryx_handler_fuzzilli ( const jerry_call_info_t *call_info_p,
++                      const jerry_value_t args_p[], /**< function arguments */
++                      const jerry_length_t args_cnt) /**< number of function arguments */
++{
++  (void) call_info_p->function; /* unused */
++  (void) call_info_p->this_value; /* unused */
++
++  jerry_char_t operation[256] = {0};
++  jerry_value_t ret_val = jerry_undefined ();
++
++  if (args_cnt > 0 && jerry_value_is_string(args_p[0]))
++  {
++    jerry_value_t str_val;
++    str_val = jerry_value_to_string (args_p[0]);
++
++    if (!jerry_value_is_exception (str_val))
++    {
++      jerry_length_t length = jerry_string_length (str_val);
++
++      if (length > 0 && length < 256)
++      {
++        jerry_string_to_buffer(str_val, JERRY_ENCODING_UTF8,operation, length);
++      }
++    }
++
++    jerry_value_free (str_val);
++  }
++
++  if (strcmp((char *)operation, "FUZZILLI_CRASH") == 0)
++  {
++    if (args_cnt == 2 && jerry_value_is_number(args_p[1]))
++    {
++      int arg = (int) jerry_value_as_number(args_p[1]);
++      switch (arg)
++      {
++        case 0:
++          *((int*)0x41414141) = 0x1337;
++          break;
++        default:
++          DCHECK(false);
++          break;
++      }
++    }
++  }
++  else if (strcmp((char *)operation, "FUZZILLI_PRINT") == 0)
++  {
++    static FILE* fzliout;
++    fzliout = fdopen(REPRL_DWFD, "w");
++    if (!fzliout) {
++      fprintf(stderr, "Fuzzer output channel not available, printing to stdout instead\n");
++      fzliout = stdout;
++    }
++
++    /* Based on the jerryx_handler_print handler */
++    const char * const null_str = "\\u0000";
++
++    for (jerry_length_t arg_index = 1; arg_index < args_cnt; arg_index++)
++    {
++      jerry_value_t str_val;
++
++      if (jerry_value_is_symbol (args_p[arg_index]))
++      {
++        str_val = jerry_symbol_descriptive_string (args_p[arg_index]);
++      }
++      else
++      {
++        str_val = jerry_value_to_string (args_p[arg_index]);
++      }
++
++      if (jerry_value_is_exception  (str_val))
++      {
++        /* There is no need to free the undefined value. */
++        ret_val = str_val;
++        break;
++      }
++
++      jerry_length_t length = jerry_string_length(str_val);
++      jerry_length_t substr_pos = 0;
++      jerry_char_t substr_buf[256];
++
++      do
++      {
++        jerry_value_t substr_val = jerry_string_substr(str_val, substr_pos, substr_pos + length);
++
++        jerry_size_t substr_size = jerry_string_to_buffer(substr_val, 
++                                                        JERRY_ENCODING_UTF8, 
++                                                        substr_buf, 
++                                                        256 - 1);
++
++        jerry_char_t *buf_end_p = substr_buf + substr_size;
++
++        /* Update start position by the number of utf-8 characters. */
++        for (jerry_char_t *buf_p = substr_buf; buf_p < buf_end_p; buf_p++)
++        {
++          /* Skip intermediate utf-8 octets. */
++          if ((*buf_p & 0xc0) != 0x80)
++          {
++            substr_pos++;
++          }
++        }
++
++        if (substr_pos == length)
++        {
++          *buf_end_p++ = (arg_index < args_cnt - 1) ? ' ' : '\n';
++        }
++
++        for (jerry_char_t *buf_p = substr_buf; buf_p < buf_end_p; buf_p++)
++        {
++          char chr = (char) *buf_p;
++
++          if (chr != '\0')
++          {
++            putc (chr, fzliout);
++            continue;
++          }
++
++          for (jerry_size_t null_index = 0; null_str[null_index] != '\0'; null_index++)
++          {
++            putc (null_str[null_index], fzliout);
++          }
++        }
++      }
++      while (substr_pos < length);
++
++      jerry_value_free (str_val);
++    }
++
++    if (args_cnt == 0 || jerry_value_is_exception  (ret_val))
++    {
++      putc ('\n', fzliout);
++    }
++    fflush(fzliout);
++  }
++  return ret_val;
++}
++
++int main_run_fuzzilli(main_args_t* arguments) {
++  char helo[] = "HELO";
++  if (write(REPRL_CWFD, helo, 4) != 4 ||
++    read(REPRL_CRFD, helo, 4) != 4) {
++    _exit(-1);
++  }
++
++
++  if (memcmp(helo, "HELO", 4) != 0) 
++  {
++    jerry_port_log("Invalid response from parent");
++    _exit(-1);
++  }
++
++  while (1) {
++    main_init_engine(arguments);
++    int fd_status = fcntl(REPRL_CRFD, F_GETFL);
++    if (fd_status == -1) {
++        _exit(-1);
++    }
++    unsigned action = 0;
++    ssize_t nread = read(REPRL_CRFD, &action, 4);
++    fflush(0);
++    if (nread != 4 || action != 0x63657865) { // 'exec'
++      fprintf(stderr, "Unknown action %x\n", action);
++      _exit(-1);
++    }
++
++    size_t script_size = 0;
++    read(REPRL_CRFD, &script_size, 8);
++
++    char* buf = malloc(script_size + 1);
++    memset(buf,0,script_size + 1);
++    char* source_buffer_tail = buf;
++    ssize_t remaining = (ssize_t) script_size;
++    while (remaining > 0) {
++      ssize_t rv = read(REPRL_DRFD, source_buffer_tail, (size_t) remaining);
++      if (rv <= 0) {
++        fprintf(stderr, "Failed to load script\n");
++        _exit(-1);
++      }
++      remaining -= rv;
++      source_buffer_tail += rv;
++    }
++
++    buf[script_size] = '\0';
++    if (!jerry_validate_string((jerry_char_t*) buf, (jerry_size_t) script_size, JERRY_ENCODING_UTF8)) {
++      free ((jerry_char_t*) buf);
++      jerry_port_log ("Error: Input must be a valid UTF-8 string.\n");
++      _exit(-1);
++    }
++
++    jerry_value_t ret_value = jerry_parse((const jerry_char_t *) buf, (jerry_size_t)script_size, NULL);
++    free(buf);
++
++    // Check and execute
++    if (!jerry_value_is_exception (ret_value)) {
++      jerry_value_t func_val = ret_value;
++      ret_value = jerry_run(func_val);
++      jerry_value_free(func_val);
++    }
++
++    int is_error = jerry_value_is_exception (ret_value);
++    if (is_error) {
++      // The following line also releases ret_value
++      jerryx_print_unhandled_exception(ret_value);
++    } else {
++      jerry_value_free(ret_value);
++
++      ret_value = jerry_run_jobs ();
++      
++      if (jerry_value_is_exception (ret_value)) {
++        jerryx_print_unhandled_exception(ret_value);
++      }
++    }      
++
++    jerry_cleanup();
++    
++    is_error <<= 8;
++    //check fd
++    fd_status = fcntl(REPRL_CWFD, F_GETFL);
++    if (fd_status == -1) {
++        _exit(-1);
++    }
++    if (write(REPRL_CWFD, &is_error, 4) != 4) {
++      _exit(1);
++    }
++    __sanitizer_cov_reset_edgeguards();
++  }
++
++  return 0;
++}
+diff --git a/jerry-main/main-fuzzilli.h b/jerry-main/main-fuzzilli.h
+new file mode 100644
+index 00000000..1e897a00
+--- /dev/null
++++ b/jerry-main/main-fuzzilli.h
+@@ -0,0 +1,9 @@
++#ifndef MAIN_FUZZILLI_H
++#define MAIN_FUZZILLI_H
++
++#include "arguments/options.h"
++
++int main_run_fuzzilli(main_args_t* arguments);
++
++
++#endif

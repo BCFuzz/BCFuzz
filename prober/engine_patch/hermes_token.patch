@@ -1,0 +1,1033 @@
+diff --git a/API/hermes/CMakeLists.txt b/API/hermes/CMakeLists.txt
+index 16ab217d2..ea577e040 100644
+--- a/API/hermes/CMakeLists.txt
++++ b/API/hermes/CMakeLists.txt
+@@ -99,7 +99,7 @@ add_hermes_library(traceInterpreter TraceInterpreter.cpp
+   LINK_LIBS libhermes hermesInstrumentation synthTrace synthTraceParser)
+ 
+ add_library(libhermes ${api_sources})
+-target_link_libraries(libhermes PUBLIC jsi PRIVATE hermesVMRuntime ${INSPECTOR_DEPS})
++target_link_libraries(libhermes PUBLIC jsi hermesVMRuntime PRIVATE ${INSPECTOR_DEPS})
+ target_link_options(libhermes PRIVATE ${HERMES_EXTRA_LINKER_FLAGS})
+ 
+ # Export the required header directory
+@@ -110,7 +110,7 @@ set_target_properties(libhermes PROPERTIES OUTPUT_NAME hermes)
+ 
+ # Create a lean version of libhermes in the same way.
+ add_library(libhermes_lean ${api_sources})
+-target_link_libraries(libhermes_lean PUBLIC jsi PRIVATE hermesVMRuntimeLean ${INSPECTOR_DEPS})
++target_link_libraries(libhermes_lean PUBLIC jsi hermesVMRuntimeLean PRIVATE  ${INSPECTOR_DEPS})
+ target_link_options(libhermes_lean PRIVATE ${HERMES_EXTRA_LINKER_FLAGS})
+ target_include_directories(libhermes_lean PUBLIC .. ../../public ${HERMES_JSI_DIR})
+ set_target_properties(libhermes_lean PROPERTIES OUTPUT_NAME hermes_lean)
+diff --git a/API/hermes/hermes.cpp b/API/hermes/hermes.cpp
+index 701fb9c47..83fc58960 100644
+--- a/API/hermes/hermes.cpp
++++ b/API/hermes/hermes.cpp
+@@ -13,6 +13,8 @@
+ #include "hermes/BCGen/HBC/BytecodeDataProvider.h"
+ #include "hermes/BCGen/HBC/BytecodeFileFormat.h"
+ #include "hermes/BCGen/HBC/BytecodeProviderFromSrc.h"
++#include "hermes/BCGen/HBC/BytecodeDisassembler.h"
++#include "hermes/BCGen/HBC/DisassemblyOptions.h"
+ #include "hermes/DebuggerAPI.h"
+ #include "hermes/Platform/Logging.h"
+ #include "hermes/Public/JSOutOfMemoryError.h"
+@@ -1229,6 +1231,9 @@ void HermesRuntime::loadSegment(
+     LOG_EXCEPTION_CAUSE("Error evaluating javascript: %s", ret.second.c_str());
+     throw jsi::JSINativeException("Error evaluating javascript: " + ret.second);
+   }
++  
++    
++    
+ 
+   auto requireContext = vm::Handle<vm::RequireContext>::dyn_vmcast(
+       impl(this)->vmHandleFromValue(context));
+@@ -1476,10 +1481,20 @@ HermesRuntimeImpl::prepareJavaScriptWithSourceMap(
+     }
+     bcErr = hbc::BCProviderFromBuffer::createBCProviderFromBuffer(
+         std::make_unique<BufferAdapter>(jsiBuffer));
++    /*
++    if(bcErr.first)
++    {
++      hbc::DisassemblyOptions disassemblyOptions = hbc::DisassemblyOptions::Pretty;
++      hbc::BytecodeDisassembler disassembler(std::move(bcErr.first));
++      disassembler.setOptions(disassemblyOptions);
++      disassembler.disassemble(llvh::outs());
++    }
++    */
+   } else {
+ #if defined(HERMESVM_LEAN)
+     bcErr.second = "prepareJavaScript source compilation not supported";
+ #else
++    //printf("execute here\n");
+     std::unique_ptr<::hermes::SourceMap> sourceMap{};
+     if (sourceMapBuf) {
+       auto buf0 = ensureZeroTerminated(sourceMapBuf);
+@@ -1501,6 +1516,7 @@ HermesRuntimeImpl::prepareJavaScriptWithSourceMap(
+         sourceURL,
+         std::move(sourceMap),
+         compileFlags_);
++    
+ #endif
+   }
+   if (!bcErr.first) {
+@@ -1508,6 +1524,7 @@ HermesRuntimeImpl::prepareJavaScriptWithSourceMap(
+     throw jsi::JSINativeException(
+         "Compiling JS failed: " + std::move(bcErr.second));
+   }
++
+   return std::make_shared<const HermesPreparedJavaScript>(
+       std::move(bcErr.first), runtimeFlags, std::move(sourceURL));
+ }
+diff --git a/include/hermes/BCGen/HBC/BytecodeDataProvider.h b/include/hermes/BCGen/HBC/BytecodeDataProvider.h
+index b25aef84e..8229afde0 100644
+--- a/include/hermes/BCGen/HBC/BytecodeDataProvider.h
++++ b/include/hermes/BCGen/HBC/BytecodeDataProvider.h
+@@ -10,6 +10,7 @@
+ 
+ #include "hermes/BCGen/HBC/BytecodeFileFormat.h"
+ #include "hermes/BCGen/HBC/DebugInfo.h"
++
+ #include "hermes/Public/Buffer.h"
+ #include "hermes/Regex/RegexSerialization.h"
+ #include "hermes/SourceMap/SourceMapGenerator.h"
+@@ -19,7 +20,7 @@
+ #include "hermes/Support/StringTableEntry.h"
+ 
+ #include "llvh/ADT/ArrayRef.h"
+-
++#include "llvh/Support/raw_ostream.h"
+ #include <atomic>
+ #include <thread>
+ 
+@@ -380,6 +381,9 @@ class BCProviderFromBuffer final : public BCProviderBase {
+       BytecodeForm form = BytecodeForm::Execution) {
+     auto ret = std::unique_ptr<BCProviderFromBuffer>(
+         new BCProviderFromBuffer(std::move(buffer), form));
++
++    
++
+     auto errstr = ret->getErrorStr();
+     return {errstr.empty() ? std::move(ret) : nullptr, errstr};
+   }
+diff --git a/include/hermes/BCGen/HBC/BytecodeDisassembler.h b/include/hermes/BCGen/HBC/BytecodeDisassembler.h
+index fc706f897..16dbc7a29 100644
+--- a/include/hermes/BCGen/HBC/BytecodeDisassembler.h
++++ b/include/hermes/BCGen/HBC/BytecodeDisassembler.h
+@@ -13,13 +13,24 @@
+ #include "hermes/BCGen/HBC/SerializedLiteralGenerator.h"
+ #include "hermes/Inst/Inst.h"
+ #include "hermes/Inst/InstDecode.h"
+-
+ #include <unordered_map>
+ 
++
++struct bc_shmem_data {
++    uint32_t loc;
++    uint32_t edges[];
++};
++
++extern struct bc_shmem_data* __bc_shmem;
++extern struct bc_shmem_data* __bc_line_shmem;
++void my_add_bc(int bc_id, int bc_line);
++
+ namespace llvh {
+ class raw_ostream;
+ } // namespace llvh
+ 
++
++
+ namespace hermes {
+ namespace hbc {
+ 
+diff --git a/include/hermes/Parser/JSLexer.h b/include/hermes/Parser/JSLexer.h
+index 7be04d5b3..cdba40418 100644
+--- a/include/hermes/Parser/JSLexer.h
++++ b/include/hermes/Parser/JSLexer.h
+@@ -22,6 +22,18 @@
+ #include <functional>
+ #include <utility>
+ 
++
++extern int my_start_record;
++struct token_shmem_data {
++    uint32_t loc;
++    uint32_t edges[];
++};
++extern struct token_shmem_data* __token_shmem;
++extern struct token_shmem_data* __line_shmem;
++void my_add_token(int token_id);
++void my_add_line(int line_id);
++
++
+ namespace hermes {
+ namespace parser {
+ 
+diff --git a/lib/BCGen/HBC/BytecodeDisassembler.cpp b/lib/BCGen/HBC/BytecodeDisassembler.cpp
+index eba6da125..8988ca684 100644
+--- a/lib/BCGen/HBC/BytecodeDisassembler.cpp
++++ b/lib/BCGen/HBC/BytecodeDisassembler.cpp
+@@ -13,6 +13,7 @@
+ #include "hermes/Regex/RegexSerialization.h"
+ #include "hermes/Support/JenkinsHash.h"
+ #include "hermes/Support/SHA1.h"
++#include "hermes/Parser/JSLexer.h"
+ 
+ #include <cstdint>
+ #include <iomanip>
+@@ -23,9 +24,82 @@
+ #include "llvh/Support/ErrorHandling.h"
+ #include "llvh/Support/raw_ostream.h"
+ 
++
++//====Fuzzing include=====
++#include <fcntl.h>
++#include <sys/mman.h>
++#include <sys/stat.h>
++#include <sys/shm.h>
++#include <unistd.h>
++#include <cerrno>
++#include <cstdio>
++#include <cstdlib>
++
++
+ using namespace hermes::inst;
+ using SLG = hermes::hbc::SerializedLiteralGenerator;
+ 
++#define BC_SHM_SIZE 0x4000
++struct bc_shmem_data* __bc_shmem = NULL;
++struct bc_shmem_data* __bc_line_shmem = NULL;
++
++
++extern "C" void my_bitmap_init()
++{
++  const char* shm_key4 = getenv("__AFL_SHM_ID4");
++  if (!shm_key4) {
++    puts("[COV] no shared memory bitmap available, skipping");
++    __bc_shmem = (struct bc_shmem_data*)malloc(BC_SHM_SIZE);
++    memset(__bc_shmem, 0, BC_SHM_SIZE);
++  } else {
++    __bc_shmem = (struct bc_shmem_data*)shmat(atoi(shm_key4), 0, 0);
++    if (__bc_shmem == MAP_FAILED) {
++      fprintf(stderr, "Failed to mmap bc shared memory region\n");
++      _exit(-1);
++    }
++  }
++
++  const char* shm_key5 = getenv("__AFL_SHM_ID5");
++  if (!shm_key5) {
++    puts("[COV] no shared memory bitmap available, skipping");
++    __bc_line_shmem = (struct bc_shmem_data*)malloc(BC_SHM_SIZE);
++    memset(__bc_line_shmem, 0, BC_SHM_SIZE);
++  } else {
++    __bc_line_shmem = (struct bc_shmem_data*)shmat(atoi(shm_key5), 0, 0);
++    if (__bc_line_shmem == MAP_FAILED) {
++      fprintf(stderr, "Failed to mmap bc line shared memory region\n");
++      _exit(-1);
++    }
++  }
++}
++
++
++void my_add_bc(int bc_id, int bc_line)
++{
++    if(my_start_record==0)
++        return;
++    if(!__bc_shmem){
++      my_bitmap_init();
++    }
++    int index = (int)__bc_shmem->loc;
++    printf("index:%d, bytecode_id:%d, bytecode_line:%d\n", index, bc_id, bc_line);
++
++    __bc_shmem->edges[index] = (uint32_t)bc_id;
++    __bc_line_shmem->edges[index] = (uint32_t)bc_line;
++    __bc_shmem->loc++;
++    __bc_line_shmem->loc++;
++    if(__bc_shmem->loc >= 4090) // about (0x1000-1)
++    {
++        __bc_shmem->loc = 0;
++        __bc_line_shmem->loc = 0;
++    }
++}
++
++void my_update_bitmap(int bc_id, int line_id)
++{
++    my_add_bc(bc_id, line_id);
++}
++
+ namespace hermes {
+ namespace hbc {
+ 
+@@ -486,11 +560,12 @@ void BytecodeVisitor::visitInstructionsInBody(
+   while (ip < bytecodeEnd) {
+     const auto md = inst::getInstMetaData(
+         (reinterpret_cast<const inst::Inst *>(ip))->opCode);
+-    OpCode op = md.opCode;
++    //OpCode op = md.opCode;
+     auto instLength = md.size;
+     preVisitInstruction(md.opCode, ip, instLength);
+ 
+     // Visit branch targets of the SwitchImm instruction.
++    /*
+     if (op == OpCode::SwitchImm && visitSwitchImmTargets) {
+       switchJumpTableForEach(
+           (inst::Inst const *)ip,
+@@ -498,7 +573,8 @@ void BytecodeVisitor::visitInstructionsInBody(
+             this->visitSwitchImmTargets(jmpIdx, offset, dest);
+           });
+     }
+-
++     */
++    /*
+     const uint8_t *operandBuf = ip + sizeof(op);
+     int operandCount = md.numOperands;
+     for (int operandIndex = 0; operandIndex < operandCount; operandIndex++) {
+@@ -507,7 +583,8 @@ void BytecodeVisitor::visitInstructionsInBody(
+       visitOperand(ip, operandType, operandBuf, operandIndex);
+       operandBuf += getOperandSize(operandType);
+     }
+-    postVisitInstruction(op, ip, instLength);
++     */
++    //postVisitInstruction(op, ip, instLength);
+     ip += instLength;
+   }
+ }
+@@ -741,28 +818,22 @@ void PrettyDisassembleVisitor::beforeStart(
+   funcVirtualOffset_ = bcProvider_->getVirtualOffsetForFunction(funcId);
+ }
+ 
+-void PrettyDisassembleVisitor::preVisitInstruction(
+-    OpCode opcode,
+-    const uint8_t *ip,
+-    int length) {
++
++
++
++void PrettyDisassembleVisitor::preVisitInstruction(OpCode opcode, const uint8_t *ip, int length) {
+   opcode_ = opcode;
+-  auto label = jumpTargets_.find(ip);
++  int line_id = 0;
+   assert(ip >= bytecodeStart_ && "Why is ip less than bytecodeStart_?");
+   uint32_t offset = ip - bytecodeStart_;
+-  if (label != jumpTargets_.end()) {
+-    os_ << "L" << label->second << ":\n";
+-  }
+-  printSourceLineForOffset(offset);
+-  // Use the overrided indention for next line's output.
+-  os_ << llvh::left_justify("", getIndentation());
+-  uint32_t globalVirtualOffset = funcVirtualOffset_ + offset;
+-  if ((options_ & DisassemblyOptions::IncludeVirtualOffsets) ==
+-      DisassemblyOptions::IncludeVirtualOffsets) {
+-    os_ << "    ";
+-    os_ << llvh::right_justify(formatString("%d", globalVirtualOffset), 10);
++  llvh::Optional<SourceMapTextLocation> sourceLocOpt = bcProvider_->getLocationForAddress(funcId_, offset);
++  if (sourceLocOpt.hasValue()) {
++    //os_ << formatString("line_id:%3d, ",sourceLocOpt.getValue().line);
++    line_id = sourceLocOpt.getValue().line;
+   }
+-  os_ << "    ";
+-  os_ << llvh::left_justify(getOpCodeString(opcode), 17);
++  //os_ << "bc_id:"<<(int)opcode_<<", "<< llvh::left_justify(getOpCodeString(opcode), 17);
++  int bc_id = (int)opcode;
++  my_update_bitmap(bc_id, line_id);
+ }
+ 
+ void PrettyDisassembleVisitor::visitOperand(
+@@ -823,20 +894,23 @@ void PrettyDisassembleVisitor::visitOperand(
+ }
+ 
+ void PrettyDisassembleVisitor::printSourceLineForOffset(uint32_t opcodeOffset) {
+-  if ((options_ & DisassemblyOptions::IncludeSource) ==
+-      DisassemblyOptions::IncludeSource) {
++  //if ((options_ & DisassemblyOptions::IncludeSource) ==
++  //    DisassemblyOptions::IncludeSource) {
+     llvh::Optional<SourceMapTextLocation> sourceLocOpt =
+         bcProvider_->getLocationForAddress(funcId_, opcodeOffset);
+     if (sourceLocOpt.hasValue()) {
+-      const std::string &fileNameStr = sourceLocOpt.getValue().fileName;
++      //const std::string &fileNameStr = sourceLocOpt.getValue().fileName;
++      /*
+       os_ << formatString(
+                  "; %s:%d:%d",
+                  fileNameStr.c_str(),
+                  sourceLocOpt.getValue().line,
+                  sourceLocOpt.getValue().column)
+           << "\n";
++      */
++      os_ << formatString("line_id:%3d, ",sourceLocOpt.getValue().line);
+     }
+-  }
++  //}
+ }
+ 
+ /// Visitor to disassemble a function in non-pretty mode which
+@@ -1040,6 +1114,7 @@ void BytecodeDisassembler::disassembleFunctionPretty(
+   disassembleVisitor.visitInstructionsInFunction(funcId);
+ 
+   // Print out switch jump tables, if any.
++  /*
+   auto &switchInsts = jumpVisitor.getSwitchIntructions();
+   if (!switchInsts.empty()) {
+     OS << "\n " << "Jump Tables: \n";
+@@ -1054,6 +1129,7 @@ void BytecodeDisassembler::disassembleFunctionPretty(
+ 
+   OS << "\n";
+   disassembleExceptionHandlersPretty(funcId, jumpTargets, OS);
++   */
+ }
+ 
+ void BytecodeDisassembler::disassembleFunctionRaw(
+@@ -1234,26 +1310,26 @@ void BytecodeDisassembler::disassemble(raw_ostream &OS) {
+     return;
+   }
+ 
+-  disassembleBytecodeFileHeader(OS);
+-  disassembleStringStorage(OS);
+-  disassembleArrayBuffer(OS);
+-  disassembleObjectBuffer(OS);
+-  disassembleBigIntStorage(OS);
+-  disassembleCJSModuleTable(OS);
+-  disassembleFunctionSourceTable(OS);
+-
++  //disassembleBytecodeFileHeader(OS);
++  //disassembleStringStorage(OS);
++  //disassembleArrayBuffer(OS);
++  //disassembleObjectBuffer(OS);
++  //disassembleBigIntStorage(OS);
++  //disassembleCJSModuleTable(OS);
++  //disassembleFunctionSourceTable(OS);
++  //printf("function num:%d\n", bcProvider_->getFunctionCount());
+   for (unsigned funcId = 0; funcId < bcProvider_->getFunctionCount();
+        ++funcId) {
+-    RuntimeFunctionHeader functionHeader =
+-        bcProvider_->getFunctionHeader(funcId);
+-
+-    dumpFunctionName(OS, *bcProvider_, funcId, functionHeader, options_);
+-    OS << "(" << functionHeader.paramCount() << " params, "
+-       << functionHeader.frameSize() << " registers, "
+-       << static_cast<unsigned int>(functionHeader.environmentSize())
+-       << " symbols)";
+-    OS << ":\n";
+-
++    //RuntimeFunctionHeader functionHeader =
++    //    bcProvider_->getFunctionHeader(funcId);
++
++    //dumpFunctionName(OS, *bcProvider_, funcId, functionHeader, options_);
++    //OS << "(" << functionHeader.paramCount() << " params, "
++    //   << functionHeader.frameSize() << " registers, "
++    //   << static_cast<unsigned int>(functionHeader.environmentSize())
++    //   << " symbols)";
++    //OS << ":\n";
++    /*
+     auto *funcDebugOffsets = bcProvider_->getDebugOffsets(funcId);
+     if (functionHeader.flags().hasDebugInfo && funcDebugOffsets != nullptr) {
+       OS << "Offset in debug table: source ";
+@@ -1279,10 +1355,11 @@ void BytecodeDisassembler::disassemble(raw_ostream &OS) {
+       }
+       OS << '\n';
+     }
++     */
+     disassembleFunction(funcId, OS);
+   }
+-  disassembleRegexs(OS);
+-  bcProvider_->getDebugInfo()->disassemble(OS);
++  //disassembleRegexs(OS);
++  //bcProvider_->getDebugInfo()->disassemble(OS);
+ }
+ 
+ } // namespace hbc
+diff --git a/lib/BCGen/HBC/BytecodeProviderFromSrc.cpp b/lib/BCGen/HBC/BytecodeProviderFromSrc.cpp
+index 1567c33e4..9dbc39e5c 100644
+--- a/lib/BCGen/HBC/BytecodeProviderFromSrc.cpp
++++ b/lib/BCGen/HBC/BytecodeProviderFromSrc.cpp
+@@ -9,12 +9,16 @@
+ 
+ #include "hermes/AST/SemValidate.h"
+ #include "hermes/BCGen/HBC/HBC.h"
++#include "hermes/BCGen/HBC/BytecodeDisassembler.h"
++#include "hermes/BCGen/HBC/DisassemblyOptions.h"
+ #include "hermes/Parser/JSParser.h"
+ #include "hermes/Runtime/Libhermes.h"
+ #include "hermes/SourceMap/SourceMapTranslator.h"
+ #include "hermes/Support/MemoryBuffer.h"
+ #include "hermes/Support/SimpleDiagHandler.h"
+ 
++#include "hermes/Optimizer/PassManager/Pipeline.h"
++#include "llvh/Support/raw_ostream.h"
+ namespace hermes {
+ namespace hbc {
+ 
+@@ -89,7 +93,7 @@ BCProviderFromSrc::createBCProviderFromSrc(
+     std::unique_ptr<SourceMap> sourceMap,
+     const CompileFlags &compileFlags) {
+   return createBCProviderFromSrc(
+-      std::move(buffer), sourceURL, std::move(sourceMap), compileFlags, {}, {});
++      std::move(buffer), sourceURL, std::move(sourceMap), compileFlags, {}, {}, NULL, runFullOptimizationPasses);
+ }
+ 
+ std::pair<std::unique_ptr<BCProviderFromSrc>, std::string>
+@@ -255,6 +259,15 @@ BCProviderFromSrc::createBCProviderFromSrcImpl(
+   }
+   auto bytecode = createBCProviderFromSrc(std::move(BM));
+   bytecode->singleFunction_ = isSingleFunctionExpression(parsed.getValue());
++  //======================================================
++  auto BM2 = hbc::generateBytecodeModule(&M, M.getTopLevelFunction(), opts);
++  auto bytecode2 = createBCProviderFromSrc(std::move(BM2));
++  hbc::DisassemblyOptions disassemblyOptions = hbc::DisassemblyOptions::Pretty;
++  hbc::BytecodeDisassembler disassembler(std::move(bytecode2));
++  disassembler.setOptions(disassemblyOptions);
++  //printf("execute here2\n");
++  disassembler.disassemble(llvh::outs());
++  //======================================================
+   return {std::move(bytecode), std::string{}};
+ }
+ 
+diff --git a/lib/CompilerDriver/CompilerDriver.cpp b/lib/CompilerDriver/CompilerDriver.cpp
+index dea8c7234..7dc09922c 100644
+--- a/lib/CompilerDriver/CompilerDriver.cpp
++++ b/lib/CompilerDriver/CompilerDriver.cpp
+@@ -27,6 +27,7 @@
+ #include "hermes/Optimizer/PassManager/Pipeline.h"
+ #include "hermes/Parser/JSONParser.h"
+ #include "hermes/Parser/JSParser.h"
++#include "hermes/Parser/JSLexer.h"
+ #include "hermes/Runtime/Libhermes.h"
+ #include "hermes/SourceMap/SourceMapGenerator.h"
+ #include "hermes/SourceMap/SourceMapParser.h"
+@@ -1856,13 +1857,13 @@ CompileResult generateBytecodeForSerialization(
+       return BackendError;
+     }
+ 
+-    if (cl::DumpTarget == DumpBytecode) {
++    //if (cl::DumpTarget == DumpBytecode) {
+       std::unique_ptr<hbc::BCProviderFromSrc> provider =
+           hbc::BCProviderFromSrc::createBCProviderFromSrc(
+               std::move(bytecodeModule));
+       provider->setSourceHash(sourceHash);
+       disassembleBytecode(std::move(provider));
+-    }
++    //}
+   } else {
+     llvm_unreachable("Invalid bytecode kind");
+   }
+@@ -1920,6 +1921,7 @@ CompileResult processSourceFiles(
+       libBuffer = llvh::MemoryBuffer::getMemBuffer(libhermes);
+       break;
+   }
++  my_start_record = 0;
+   if (!loadGlobalDefinition(*context, std::move(libBuffer), declFileList)) {
+     return LoadGlobalsFailed;
+   }
+@@ -1936,6 +1938,7 @@ CompileResult processSourceFiles(
+     }
+   }
+ 
++  my_start_record = 1;
+   // Create the source map if requested.
+   llvh::Optional<SourceMapGenerator> sourceMapGen{};
+   if (cl::OutputSourceMap) {
+@@ -2074,6 +2077,32 @@ CompileResult processSourceFiles(
+     assert(
+         !sourceMapGen &&
+         "validateFlags() should enforce no source map output for execution");
++
++    BaseBytecodeMap baseBytecodeMap;
++    if (cl::BytecodeFormat == cl::BytecodeFormatKind::HBC &&
++        !cl::BaseBytecodeFile.empty()) {
++      if (!readBaseBytecodeMap(
++              baseBytecodeMap, cl::BaseBytecodeFile, context->getAllocator())) {
++        return InputFileError;
++      }
++    }
++    llvh::StringRef base = cl::BytecodeOutputFilename;
++    if (context->getSegments().size() < 2) {
++      OutputStream fileOS{llvh::outs()};
++      if (!base.empty() && !fileOS.open(base, F_None)) {
++        return OutputFileError;
++      }
++      generateBytecodeForSerialization(
++          fileOS.os(),
++          M,
++          genOptions,
++          sourceHash,
++          llvh::None,
++          sourceMapGen ? sourceMapGen.getPointer() : nullptr,
++          baseBytecodeMap);
++    }
++
++
+     return generateBytecodeForExecution(M, genOptions);
+   }
+ 
+diff --git a/lib/Optimizer/PassManager/PassManager.cpp b/lib/Optimizer/PassManager/PassManager.cpp
+index 50c1cc3c3..19509963d 100644
+--- a/lib/Optimizer/PassManager/PassManager.cpp
++++ b/lib/Optimizer/PassManager/PassManager.cpp
+@@ -189,6 +189,10 @@ void PassManager::run(Module *M) {
+ 
+     /// Handle function passes:
+     if (auto *FP = llvh::dyn_cast<FunctionPass>(P.get())) {
++      //========= wjm insert ============
++      //printf("Function pass: %s\n", FP->getName());
++      //M->dump();
++      //========= wjm insert ============
+       LLVM_DEBUG(
+           llvh::dbgs() << "Running the function pass " << FP->getName()
+                        << "\n");
+diff --git a/lib/Parser/JSLexer.cpp b/lib/Parser/JSLexer.cpp
+index eed703d3a..49b8e67a1 100644
+--- a/lib/Parser/JSLexer.cpp
++++ b/lib/Parser/JSLexer.cpp
+@@ -10,10 +10,88 @@
+ 
+ #include "dtoa/dtoa.h"
+ #include "hermes/Support/Conversions.h"
++#include "hermes/Support/SourceErrorManager.h"
+ 
+ #include "llvh/ADT/ScopeExit.h"
+ #include "llvh/ADT/StringSwitch.h"
+ 
++#include <fcntl.h>
++#include <sys/mman.h>
++#include <sys/stat.h>
++#include <sys/shm.h>
++#include <unistd.h>
++#include <cerrno>
++#include <cstdio>
++#include <cstdlib>
++
++#define SHM_SIZE 0x100000
++int my_start_record = 0;
++
++struct token_shmem_data* __token_shmem = NULL;
++struct token_shmem_data* __line_shmem = NULL;
++
++void token_shmem_init()
++{
++  const char* shm_key2 = getenv("__AFL_SHM_ID2");
++  if (!shm_key2) {
++    puts("[COV] no shared memory bitmap available, skipping");
++    __token_shmem = (struct token_shmem_data*)malloc(SHM_SIZE);
++    memset(__token_shmem, 0, SHM_SIZE);
++  } else {
++
++    __token_shmem = (struct token_shmem_data*)shmat(atoi(shm_key2), 0, 0);
++    if (__token_shmem == MAP_FAILED) {
++      fprintf(stderr, "Failed to mmap token shared memory region\n");
++      _exit(-1);
++    }
++  }
++
++  const char* shm_key3 = getenv("__AFL_SHM_ID3");
++  if (!shm_key3) {
++    puts("[COV] no shared memory bitmap available, skipping");
++    __line_shmem = (struct token_shmem_data*)malloc(SHM_SIZE);
++    memset(__line_shmem, 0, SHM_SIZE);
++  } else {
++    __line_shmem = (struct token_shmem_data*)shmat(atoi(shm_key3), 0, 0);
++    if (__line_shmem == MAP_FAILED) {
++      fprintf(stderr, "Failed to mmap token line shared memory region\n");
++      _exit(-1);
++    }
++  }
++}
++
++void my_add_token(int token_id)
++{
++    if(!__token_shmem)
++      token_shmem_init();
++    if(my_start_record==0)
++        return;
++    int index = (int)__token_shmem->loc;
++    __token_shmem->edges[index] = (uint32_t)token_id;
++    __token_shmem->loc++;
++    if(__token_shmem->loc >= (0x40000-4))
++    {
++        my_start_record=0; // myrecord
++        __token_shmem->loc = 0; // token_shmem len
++    }
++    printf("token:%d, ", token_id);
++}
++
++void my_add_line(int line_id)
++{
++    if(my_start_record==0)
++        return;
++    int index = (int)__line_shmem->loc;
++    __line_shmem->edges[index] = (uint32_t)line_id;
++    __line_shmem->loc++;
++    if(__line_shmem->loc >= (0x40000-4))
++    {
++        my_start_record=0; // myrecord
++        __line_shmem->loc = 0; // token_shmem len
++    }
++    printf("line:%d\n", line_id);
++}
++
+ namespace hermes {
+ namespace parser {
+ 
+@@ -668,7 +746,15 @@ const Token *JSLexer::advance(GrammarContext grammarContext) {
+   } // for(;;)
+ 
+   finishToken(curCharPtr_);
+-
++  if(my_start_record)
++  {
++    SourceErrorManager::SourceCoords coords;
++    sm_.findBufferLineAndLoc(token_.getStartLoc(), coords);
++    //printf("token_id:%d, line_id:%d\n", (int)token_.getKind(), (int)coords.line);
++    my_add_token((int)token_.getKind());
++    my_add_line((int)coords.line);
++  }
++    
+   return &token_;
+ }
+ 
+diff --git a/lib/Utils/Dumper.cpp b/lib/Utils/Dumper.cpp
+index e2c111228..6852ba130 100644
+--- a/lib/Utils/Dumper.cpp
++++ b/lib/Utils/Dumper.cpp
+@@ -230,7 +230,7 @@ void IRPrinter::printInstructionDestination(Instruction *I) {
+ void IRPrinter::printInstruction(Instruction *I) {
+   printInstructionDestination(I);
+   os << " = ";
+-  os << I->getName();
++  os << "inst id:"<<(int)I->getKind() <<" " <<I->getName();
+ 
+   bool first = true;
+ 
+diff --git a/tools/fuzzers/fuzzilli/CMakeLists.txt b/tools/fuzzers/fuzzilli/CMakeLists.txt
+index a9c0f7b93..f2d993587 100644
+--- a/tools/fuzzers/fuzzilli/CMakeLists.txt
++++ b/tools/fuzzers/fuzzilli/CMakeLists.txt
+@@ -12,6 +12,6 @@ if(HERMES_ENABLE_FUZZILLI)
+       ${ALL_HEADER_FILES}
+     )
+ 
+-    target_include_directories(fuzzilli PRIVATE ${HERMES_SOURCE_DIR}/API)
++    target_include_directories(fuzzilli PRIVATE ${HERMES_SOURCE_DIR}/API ${HERMES_SOURCE_DIR}/include)
+     target_link_libraries(fuzzilli libhermes)
+ endif()
+diff --git a/tools/fuzzers/fuzzilli/fuzzilli.cpp b/tools/fuzzers/fuzzilli/fuzzilli.cpp
+index 351a4ec95..9f45ad7af 100644
+--- a/tools/fuzzers/fuzzilli/fuzzilli.cpp
++++ b/tools/fuzzers/fuzzilli/fuzzilli.cpp
+@@ -9,6 +9,7 @@
+ #include <jsi/jsi.h>
+ 
+ #include <cstring>
++#include "hermes/BCGen/HBC/BytecodeDisassembler.h"
+ 
+ using facebook::hermes::HermesRuntime;
+ using facebook::hermes::makeHermesRuntime;
+@@ -39,6 +40,7 @@ using facebook::jsi::Value;
+ #define REPRL_DWFD 103
+ 
+ #define SHM_SIZE 0x100000
++
+ #define MAX_EDGES ((SHM_SIZE - 4) * 8)
+ 
+ #define CHECK(cond)                            \
+@@ -47,13 +49,12 @@ using facebook::jsi::Value;
+     _exit(-1);                                 \
+   }
+ 
+-struct SharedMemData {
+-  uint32_t numEdges;
+-  unsigned char edges[];
+-};
+ 
+ struct SharedMemData *shmem;
+ 
++
++
++
+ uint32_t *__edges_start, *__edges_stop;
+ void __sanitizer_cov_reset_edgeguards() {
+   uint64_t N = 0;
+@@ -61,20 +62,30 @@ void __sanitizer_cov_reset_edgeguards() {
+     *x = ++N;
+ }
+ 
+-extern "C" void __sanitizer_cov_trace_pc_guard_init(
++
++uint32_t max_numEdges = 0;
++extern "C" __attribute__ ((visibility("default"))) void __sanitizer_cov_trace_pc_guard_init(
+     uint32_t *start,
+     uint32_t *stop) {
+   // Avoid duplicate initialization
+   if (start == stop || *start)
+     return;
+ 
++  /*
+   if (__edges_start != nullptr || __edges_stop != nullptr) {
+     fprintf(
+         stderr,
+         "Coverage instrumentation is only supported for a single module\n");
+     _exit(-1);
+   }
+-
++  */
++  uint32_t temp = stop - start;
++  if(temp>max_numEdges)
++  {
++    max_numEdges = temp;
++  } else {
++    return;
++  }
+   __edges_start = start;
+   __edges_stop = stop;
+ 
+@@ -90,7 +101,6 @@ extern "C" void __sanitizer_cov_trace_pc_guard_init(
+           stderr, "Failed to open shared memory region: %s\n", strerror(errno));
+       _exit(-1);
+     }
+-
+     shmem = (struct SharedMemData *)mmap(
+         nullptr, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+     if (shmem == MAP_FAILED) {
+@@ -99,16 +109,20 @@ extern "C" void __sanitizer_cov_trace_pc_guard_init(
+     }
+   }
+ 
++ 
++
++
++  shmem->numEdges = temp;
+   __sanitizer_cov_reset_edgeguards();
+ 
+-  shmem->numEdges = stop - start;
++  //shmem->numEdges = stop - start;
+   printf(
+       "[COV] edge counters initialized. Shared memory: %s with %u edges\n",
+       shm_key,
+       shmem->numEdges);
+ }
+ 
+-extern "C" void __sanitizer_cov_trace_pc_guard(uint32_t *guard) {
++extern "C" __attribute__ ((visibility("default"))) void __sanitizer_cov_trace_pc_guard(uint32_t *guard) {
+   // There's a small race condition here: if this function executes in two
+   // threads for the same edge at the same time, the first thread might disable
+   // the edge (by setting the guard to zero) before the second thread fetches
+@@ -162,7 +176,7 @@ Value CrashFunction(
+     if (crashCode == 0.0) {
+       *((int *)0x1) = 2;
+       exit(-1);
+-    } else if (crashCode == 1.0) {
++    } else if (crashCode == 1.0 || crashCode == 2.0) {
+       assert(1 == 0);
+     }
+   }
+@@ -185,10 +199,11 @@ class MemoryBuffer : public facebook::jsi::Buffer {
+ };
+ 
+ int main(int argc, char **argv) {
+-  if (argc != 2 || strcmp(argv[1], "--replr") != 0)
+-    return 0;
++  //if (argc != 2 || strcmp(argv[1], "--replr") != 0)
++  //  return 0;
+   // get fuzzer arguments
+   char helo[] = "HELO";
++  
+   if (write(REPRL_CWFD, helo, 4) != 4 || read(REPRL_CRFD, helo, 4) != 4) {
+     printf("Invalid HELO response from parent\n");
+     exit(-1);
+@@ -198,6 +213,8 @@ int main(int argc, char **argv) {
+     printf("Invalid response from parent\n");
+     exit(-1);
+   }
++  
++  
+   // fuzzing loop
+   while (true) {
+     auto runtime = makeHermesRuntime(::hermes::vm::RuntimeConfig::Builder()
+@@ -212,7 +229,8 @@ int main(int argc, char **argv) {
+         *runtime, crashFunctionProp, 1, CrashFunction);
+     runtime->global().setProperty(
+         *runtime, crashFunctionName, crashFunctionDef);
+-    size_t script_size = 0;
++    size_t script_size = 7;
++    
+     unsigned action;
+     CHECK(read(REPRL_CRFD, &action, 4) == 4);
+     if (action == 'cexe') {
+@@ -221,9 +239,11 @@ int main(int argc, char **argv) {
+       printf("Unknown Action\n");
+       exit(-1);
+     }
++    
+     uint8_t *script_src = (uint8_t *)(malloc(script_size + 1));
+     if (script_src == nullptr)
+       return 0;
++    
+     uint8_t *ptr = script_src;
+     size_t remaining = script_size;
+     while (remaining > 0) {
+@@ -235,6 +255,18 @@ int main(int argc, char **argv) {
+       remaining -= rv;
+       ptr += rv;
+     }
++    
++    
++    
++    //script_src[0] = 'l';
++    //script_src[1] = 'e';
++    //script_src[2] = 't';
++    //script_src[3] = ' ';
++    //script_src[4] = 'a';
++    //script_src[5] = '=';
++    //script_src[6] = '1';
++    
++    
+     script_src[script_size] = '\0';
+     bool exceptionThrew(false);
+     try {
+@@ -242,6 +274,7 @@ int main(int argc, char **argv) {
+           std::make_unique<MemoryBuffer>(script_src, script_size), "");
+     } catch (const JSIException &e) {
+       exceptionThrew = true;
++      printf("%s\n", std::string(e.what()).c_str());
+     }
+     free(script_src);
+     fflush(stdout);
+@@ -249,6 +282,7 @@ int main(int argc, char **argv) {
+     auto status = ((exceptionThrew ? 1 : 0) & 0xff) << 8;
+     CHECK(write(REPRL_CWFD, &status, 4) == 4);
+     __sanitizer_cov_reset_edgeguards();
++    //break;
+   }
+   return 0;
+ }
+diff --git a/tools/hermes/hermes.cpp b/tools/hermes/hermes.cpp
+index 493e646f8..847da2a04 100644
+--- a/tools/hermes/hermes.cpp
++++ b/tools/hermes/hermes.cpp
+@@ -5,9 +5,11 @@
+  * LICENSE file in the root directory of this source tree.
+  */
+ 
++#include "hermes/BCGen/HBC/BytecodeDisassembler.h"
+ #include "hermes/CompilerDriver/CompilerDriver.h"
+ #include "hermes/ConsoleHost/ConsoleHost.h"
+ #include "hermes/ConsoleHost/RuntimeFlags.h"
++#include "hermes/Parser/JSLexer.h"
+ #include "hermes/Support/OSCompat.h"
+ #include "hermes/Support/PageAccessTracker.h"
+ 
+@@ -24,8 +26,88 @@
+ 
+ #include "repl.h"
+ 
++#include <fcntl.h>
++#include <sys/mman.h>
++#include <sys/stat.h>
++#include <sys/shm.h>
++#include <unistd.h>
++#include <cerrno>
++#include <cstdint>
++#include <cstdio>
++#include <cstdlib>
++#include <string>
++
+ using namespace hermes;
+ 
++#define SHM_SIZE 0x100000
++#define MAX_EDGES ((SHM_SIZE - 4) * 8)
++
++struct shmem_data {
++    uint32_t num_edges;
++    unsigned char edges[];
++};
++struct shmem_data* __shmem;
++int be_able_to_trace_pc_guard = 0;
++
++
++uint32_t *__edges_start, *__edges_stop;
++void __sanitizer_cov_reset_edgeguards() {
++    uint32_t N = 0;
++    for (uint32_t *x = __edges_start; x < __edges_stop && N < MAX_EDGES; x++)
++        *x = ++N;
++}
++
++extern "C" __attribute__ ((visibility("default"))) void __sanitizer_cov_trace_pc_guard_init(uint32_t *start, uint32_t *stop) {
++    // Avoid duplicate initialization
++    if (start == stop || *start)
++        return;
++
++    if (__edges_start != NULL || __edges_stop != NULL) {
++        fprintf(stderr, "Coverage instrumentation is only supported for a single module\n");
++        _exit(-1);
++    }
++
++    __edges_start = start;
++    __edges_stop = stop;
++
++    // Map the shared memory region
++    const char* shm_key = getenv("__AFL_SHM_ID");
++    if (!shm_key) {
++        puts("[COV] no shared memory bitmap available, skipping");
++        __shmem = (struct shmem_data*) malloc(SHM_SIZE);
++    } else {
++        __shmem = (struct shmem_data*) shmat(atoi(shm_key), 0, 0);
++        if (__shmem == MAP_FAILED) {
++            fprintf(stderr, "Failed to mmap shared memory region\n");
++            _exit(-1);
++        }
++    }
++    __sanitizer_cov_reset_edgeguards();
++
++    __shmem->num_edges = (uint32_t) (stop - start);
++    be_able_to_trace_pc_guard = 1;
++    printf("[COV] My edge counters initialized. Shared memory: %s with %u edges\n", shm_key, __shmem->num_edges);
++}
++
++extern "C" __attribute__ ((visibility("default"))) void __sanitizer_cov_trace_pc_guard(uint32_t *guard, int bbflag) {
++  if(!be_able_to_trace_pc_guard) return;
++    // There's a small race condition here: if this function executes in two threads for the same
++    // edge at the same time, the first thread might disable the edge (by setting the guard to zero)
++    // before the second thread fetches the guard value (and thus the index). However, our
++    // instrumentation ignores the first edge (see libcoverage.c) and so the race is unproblematic.
++    uint32_t index = *guard;
++    __shmem->edges[index] = 1;
++
++    // parse function entry or return block or loopheader or looplatch or loopexiting
++    
++    if(((1<<25)&bbflag)!=0 || ((1<<26)&bbflag)!=0 || ((1<<29)&bbflag)!=0 || ((1<<30)&bbflag)!=0 || ((1<<24)&bbflag)!=0) 
++    {
++        my_add_token(bbflag);
++        my_add_line(0);
++    }
++    
++}
++
+ namespace cl {
+ using llvh::cl::opt;
+ 
+@@ -142,6 +224,14 @@ static int executeHBCBytecodeFromCL(
+           &info.filename);
+     }
+   }
++  if(!success)
++  {
++    printf("******[Semantic] My Error******\n");
++    my_start_record = 0;
++    my_add_token(1<<28);
++    my_add_line(0);
++  }
++    
+   return success ? EXIT_SUCCESS : EXIT_FAILURE;
+ }
+ 
+@@ -205,6 +295,10 @@ int main(int argc, char **argv) {
+         std::move(res.bytecodeProvider), res.bytecodeBufferInfo);
+     return ret;
+   } else {
++    printf("******[Syntax] My Error******\n");
++    my_start_record = 0;
++    my_add_token(1<<28);
++    my_add_line(0);
+     return res.status;
+   }
+ }

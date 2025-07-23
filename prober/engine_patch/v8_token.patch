@@ -1,0 +1,383 @@
+diff --git a/src/compiler/graph-visualizer.cc b/src/compiler/graph-visualizer.cc
+index f5c06635bd9..92183b58451 100644
+--- a/src/compiler/graph-visualizer.cc
++++ b/src/compiler/graph-visualizer.cc
+@@ -408,7 +408,7 @@ void JSONGraphWriter::PrintNode(Node* node, bool is_live) {
+   node->op()->PrintTo(label, Operator::PrintVerbosity::kSilent);
+   node->op()->PrintTo(title, Operator::PrintVerbosity::kVerbose);
+   node->op()->PrintPropsTo(properties);
+-  os_ << "{\"id\":" << SafeId(node) << ",\"label\":\"" << JSONEscaped(label)
++  os_ << "{\"id\":" << SafeId(node) /*<< ",\"opcode\":" << int(node->opcode())*/ << ",\"label\":\"" << JSONEscaped(label)
+       << "\""
+       << ",\"title\":\"" << JSONEscaped(title) << "\""
+       << ",\"live\": " << (is_live ? "true" : "false") << ",\"properties\":\""
+diff --git a/src/compiler/pipeline.cc b/src/compiler/pipeline.cc
+index a7d6de72016..8fb4187c6f2 100644
+--- a/src/compiler/pipeline.cc
++++ b/src/compiler/pipeline.cc
+@@ -3,7 +3,7 @@
+ // found in the LICENSE file.
+ 
+ #include "src/compiler/pipeline.h"
+-
++#include "src/fuzzilli/cov.h"
+ #include <fstream>
+ #include <iostream>
+ #include <memory>
+@@ -158,6 +158,7 @@
+ // Turboshaft graphs.
+ #define TARGET_SUPPORTS_TURBOSHAFT_INSTRUCTION_SELECTION 1
+ 
++//extern struct shmem_data* shmem2;
+ namespace v8 {
+ namespace internal {
+ namespace compiler {
+@@ -2081,6 +2082,39 @@ struct PrintGraphPhase {
+   }
+ };
+ 
++/*
++struct UpdataBitmapPhase {
++  DECL_PIPELINE_PHASE_CONSTANTS(PrintGraph)
++
++  void Run(TFPipelineData* data, Zone* temp_zone, const char* phase) {
++    Graph* graph = data->graph();
++    UnparkedScopeIfNeeded scope(data->broker());
++    AllowHandleDereference allow_deref;
++    
++    //void(temp_zone);
++    //void(phase);
++
++    AccountingAllocator allocator;
++    Zone tmp_zone(&allocator, ZONE_NAME);
++    AllNodes all(&tmp_zone, graph, false);
++
++    // bitmap before bytecode_base is used to recode bytecode
++    
++    int bytecode_base = 300;
++    for (Node* const node : all.reachable)
++    {
++      int myop = int(node->opcode()) + bytecode_base;
++      if((shmem2->edges[myop / 8] & (1<<(myop % 8))) == 0 )
++      {
++        shmem2->edges[myop / 8] |= 1 << (myop % 8);
++        //printf("op: %d\n", myop - bytecode_base);
++      }
++    }
++    
++  }
++};
++*/
++
+ struct VerifyGraphPhase {
+   DECL_PIPELINE_PHASE_CONSTANTS(VerifyGraph)
+ 
+@@ -2487,6 +2521,7 @@ void PipelineImpl::RunPrintAndVerify(const char* phase, bool untyped) {
+   if (info()->trace_turbo_json() || info()->trace_turbo_graph()) {
+     Run<PrintGraphPhase>(phase);
+   }
++  //Run<UpdataBitmapPhase>(phase);
+   if (v8_flags.turbo_verify) {
+     Run<VerifyGraphPhase>(untyped);
+   }
+diff --git a/src/d8/d8.cc b/src/d8/d8.cc
+index 76b54329579..671e2d83d56 100644
+--- a/src/d8/d8.cc
++++ b/src/d8/d8.cc
+@@ -120,6 +120,7 @@
+ #define CHECK(condition) assert(condition)
+ #endif
+ 
++extern int start_record;
+ namespace v8 {
+ 
+ namespace {
+@@ -4849,6 +4850,9 @@ bool SourceGroup::Execute(Isolate* isolate) {
+     Shell::update_script_size(source->Length());
+     if (!Shell::ExecuteString(isolate, source, file_name,
+                               Shell::kReportExceptions)) {
++      printf("******My Error******\n");
++      my_add_token(1<<28);
++      start_record = 0;
+       success = false;
+       break;
+     }
+@@ -5780,7 +5784,10 @@ bool Shell::RunMainIsolate(v8::Isolate* isolate, bool keep_context_alive) {
+     // We cannot use a Context::Scope here, as it keeps a local handle to the
+     // context and SourceGroup::Execute may execute a non-nestable task, e.g. a
+     // stackless GC.
++    start_record = 0;
+     global_context.Get(isolate)->Enter();
++    // TODO: start_record
++    start_record = 1;
+     if (!options.isolate_sources[0].Execute(isolate)) success = false;
+     global_context.Get(isolate)->Exit();
+   }
+diff --git a/src/fuzzilli/cov.cc b/src/fuzzilli/cov.cc
+index 3d02e659128..7eac9976b4f 100644
+--- a/src/fuzzilli/cov.cc
++++ b/src/fuzzilli/cov.cc
+@@ -12,19 +12,24 @@
+ #include <sys/mman.h>
+ #include <sys/stat.h>
+ #include <sys/wait.h>
++#include <sys/shm.h>
+ #include <unistd.h>
+ 
+ #include "src/base/platform/memory.h"
+ 
+ #define SHM_SIZE 0x100000
+ #define MAX_EDGES ((SHM_SIZE - 4) * 8)
++#define mySize 4096
++
++
+ 
+-struct shmem_data {
+-  uint32_t num_edges;
+-  unsigned char edges[];
+-};
+ 
+ struct shmem_data* shmem;
++struct token_shmem_data* __token_shmem;
++
++int start_record = 0;
++int start_record2 = 0;
++int be_able_to_trace_pc_guard = 0;
+ 
+ uint32_t *edges_start, *edges_stop;
+ uint32_t builtins_start;
+@@ -36,6 +41,21 @@ void sanitizer_cov_reset_edgeguards() {
+     *x = ++N;
+ }
+ 
++void my_add_token(int token_id)
++{
++    if(start_record==0 || start_record2==0)
++        return;
++    int index = (int)__token_shmem->loc;
++    __token_shmem->edges[index] = (uint32_t)token_id;
++    __token_shmem->loc++;
++    if(__token_shmem->loc >= (0x40000-4))
++    {
++        start_record=0; // myrecord
++        __token_shmem->loc = 0; // token_shmem len
++    }
++    printf("token_id:%d\n", token_id);
++}
++
+ extern "C" void __sanitizer_cov_trace_pc_guard_init(uint32_t* start,
+                                                     uint32_t* stop) {
+   // We should initialize the shared memory region only once. We can initialize
+@@ -55,28 +75,36 @@ extern "C" void __sanitizer_cov_trace_pc_guard_init(uint32_t* start,
+     return;
+   }
+   // Map the shared memory region
+-  const char* shm_key = getenv("SHM_ID");
+-  if (!shm_key) {
+-    fprintf(stderr, "[COV] no shared memory bitmap available, skipping\n");
+-    shmem = (struct shmem_data*)v8::base::Malloc(SHM_SIZE);
+-  } else {
+-    int fd = shm_open(shm_key, O_RDWR, S_IREAD | S_IWRITE);
+-    if (fd <= -1) {
+-      fprintf(stderr, "[COV] Failed to open shared memory region\n");
+-      _exit(-1);
++    const char* shm_key = getenv("__AFL_SHM_ID");
++    if (!shm_key) {
++        puts("[COV] no shared memory bitmap available, skipping");
++        shmem = (struct shmem_data*) malloc(SHM_SIZE);
++    } else {
++        shmem = (struct shmem_data*) shmat(atoi(shm_key), 0, 0);
++        if (shmem == MAP_FAILED) {
++            fprintf(stderr, "Failed to mmap shared memory region\n");
++            _exit(-1);
++        }
+     }
+ 
+-    shmem = (struct shmem_data*)mmap(0, SHM_SIZE, PROT_READ | PROT_WRITE,
+-                                     MAP_SHARED, fd, 0);
+-    if (shmem == MAP_FAILED) {
+-      fprintf(stderr, "[COV] Failed to mmap shared memory region\n");
++    const char* shm_key2 = getenv("__AFL_SHM_ID2");
++  if (!shm_key2) {
++    puts("[COV] no shared memory bitmap available, skipping");
++    __token_shmem = (struct token_shmem_data*)malloc(SHM_SIZE);
++    memset(__token_shmem, 0, SHM_SIZE);
++  } else {
++
++    __token_shmem = (struct token_shmem_data*)shmat(atoi(shm_key2), 0, 0);
++    if (__token_shmem == MAP_FAILED) {
++      fprintf(stderr, "Failed to mmap token shared memory region\n");
+       _exit(-1);
+     }
+   }
+-
++  
+   edges_start = start;
+   edges_stop = stop;
+   sanitizer_cov_reset_edgeguards();
++  be_able_to_trace_pc_guard = 1;
+ 
+   shmem->num_edges = static_cast<uint32_t>(stop - start);
+   builtins_start = 1 + shmem->num_edges;
+@@ -98,15 +126,28 @@ uint32_t sanitizer_cov_count_discovered_edges() {
+   return on_edges_counter;
+ }
+ 
+-extern "C" void __sanitizer_cov_trace_pc_guard(uint32_t* guard) {
++extern "C" void __sanitizer_cov_trace_pc_guard(uint32_t* guard, int bbflag) {
+   // There's a small race condition here: if this function executes in two
+   // threads for the same edge at the same time, the first thread might disable
+   // the edge (by setting the guard to zero) before the second thread fetches
+   // the guard value (and thus the index). However, our instrumentation ignores
+   // the first edge (see libcoverage.c) and so the race is unproblematic.
++  if(!be_able_to_trace_pc_guard) return;
+   uint32_t index = *guard;
+-  shmem->edges[index / 8] |= 1 << (index % 8);
+-  *guard = 0;
++  shmem->edges[index] |= 1;
++
++  start_record2=1;
++
++    // parse function entry or return block or loopheader or looplatch or loopexiting
++    if(((1<<25)&bbflag)!=0 || ((1<<26)&bbflag)!=0 || ((1<<29)&bbflag)!=0 || ((1<<30)&bbflag)!=0 || ((1<<24)&bbflag)!=0) 
++    {
++        my_add_token(bbflag);
++    }
++    if(((1<<27)&bbflag) != 0) // ignore ERblock in JSC
++    {
++        start_record2=0;
++    }
++  
+ }
+ 
+ void cov_init_builtins_edges(uint32_t num_edges) {
+diff --git a/src/fuzzilli/cov.h b/src/fuzzilli/cov.h
+index 2c05f6f1b6e..c3cdd96b9b8 100644
+--- a/src/fuzzilli/cov.h
++++ b/src/fuzzilli/cov.h
+@@ -13,6 +13,17 @@
+ #include <cstdint>
+ #include <vector>
+ 
++struct shmem_data {
++  uint32_t num_edges;
++  unsigned char edges[];
++};
++
++struct token_shmem_data {
++    uint32_t loc;
++    uint32_t edges[];
++};
++
++void my_add_token(int token_id);
+ void sanitizer_cov_reset_edgeguards();
+ uint32_t sanitizer_cov_count_discovered_edges();
+ void cov_init_builtins_edges(uint32_t num_edges);
+diff --git a/src/interpreter/interpreter.cc b/src/interpreter/interpreter.cc
+index e4fe850c9ca..9cc6d43a9f8 100644
+--- a/src/interpreter/interpreter.cc
++++ b/src/interpreter/interpreter.cc
+@@ -281,6 +281,10 @@ InterpreterCompilationJob::Status InterpreterCompilationJob::DoFinalizeJobImpl(
+     bytecodes->set_source_position_table(*source_position_table, kReleaseStore);
+   }
+ 
++  // modefied by wjm on 2024.10.9
++  //printf("Bytecode length: %d\n", bytecodes->length());
++  //bytecodes->MyUpdateBitmap();
++
+   if (ShouldPrintBytecode(shared_info)) {
+     StdoutStream os;
+     std::unique_ptr<char[]> name =
+diff --git a/src/objects/bytecode-array.cc b/src/objects/bytecode-array.cc
+index 36f0a691db3..3bf4b8ad92e 100644
+--- a/src/objects/bytecode-array.cc
++++ b/src/objects/bytecode-array.cc
+@@ -3,6 +3,7 @@
+ // found in the LICENSE file.
+ 
+ #include "src/objects/bytecode-array.h"
++#include "src/fuzzilli/cov.h"
+ 
+ #include <iomanip>
+ 
+@@ -13,7 +14,9 @@
+ #include "src/interpreter/bytecode-decoder.h"
+ #include "src/objects/bytecode-array-inl.h"
+ #include "src/utils/memcopy.h"
++#include "src/utils/ostreams.h"
+ 
++//extern struct shmem_data* shmem2;
+ namespace v8 {
+ namespace internal {
+ 
+@@ -107,6 +110,27 @@ void BytecodeArray::Disassemble(std::ostream& os) {
+   Disassemble(handle, os);
+ }
+ 
++/*
++void BytecodeArray::MyUpdateBitmap() {
++  DisallowGarbageCollection no_gc;
++  // Storage for backing the handle passed to the iterator. This handle won't be
++  // updated by the gc, but that's ok because we've disallowed GCs anyway.
++  BytecodeArray handle_storage = *this;
++  
++  Handle<BytecodeArray> handle(reinterpret_cast<Address*>(&handle_storage));
++  interpreter::BytecodeArrayIterator iterator(handle);
++  //Address base_address = handle->GetFirstBytecodeAddress();
++  while (!iterator.done()) {
++    interpreter::Bytecode bytecode = iterator.current_bytecode();
++    if((shmem2->edges[int(bytecode)/8] & (1<<(int(bytecode)%8))) == 0 )
++    {
++      shmem2->edges[int(bytecode) / 8] |= 1 << (int(bytecode) % 8);
++
++    }
++    iterator.Advance();
++  }
++}
++*/
+ // static
+ void BytecodeArray::Disassemble(Handle<BytecodeArray> handle,
+                                 std::ostream& os) {
+diff --git a/src/objects/bytecode-array.h b/src/objects/bytecode-array.h
+index fa9bc00da0e..1d88ac84fe0 100644
+--- a/src/objects/bytecode-array.h
++++ b/src/objects/bytecode-array.h
+@@ -114,6 +114,7 @@ class BytecodeArray : public ExposedTrustedObject {
+ 
+   V8_EXPORT_PRIVATE void PrintJson(std::ostream& os);
+   V8_EXPORT_PRIVATE void Disassemble(std::ostream& os);
++  //V8_EXPORT_PRIVATE void MyUpdateBitmap();
+ 
+   V8_EXPORT_PRIVATE static void Disassemble(Handle<BytecodeArray> handle,
+                                             std::ostream& os);
+diff --git a/src/parsing/scanner.cc b/src/parsing/scanner.cc
+index 7fd63980996..9d2ecab6517 100644
+--- a/src/parsing/scanner.cc
++++ b/src/parsing/scanner.cc
+@@ -5,7 +5,7 @@
+ // Features shared by parsing and pre-parsing scanners.
+ 
+ #include "src/parsing/scanner.h"
+-
++#include "src/fuzzilli/cov.h"
+ #include <stdint.h>
+ 
+ #include <cmath>
+@@ -20,6 +20,7 @@
+ #include "src/parsing/scanner-inl.h"
+ #include "src/zone/zone.h"
+ 
++extern int start_record;
+ namespace v8::internal {
+ 
+ class Scanner::ErrorState {
+@@ -186,6 +187,9 @@ Token::Value Scanner::Next() {
+     previous->token = Token::kUninitialized;
+     DCHECK_NE(Token::kUninitialized, current().token);
+   }
++  if(start_record)
++    my_add_token((int)current().token);
++    //printf("token_id: %d\n", (int)current().token);
+   return current().token;
+ }
+ 
